@@ -34,11 +34,13 @@ class ServerCallback : public BLEServerCallbacks
   {
     
     isConnected = true;
+    analogWrite(LED2_PIN, 10);
   }
 
   void onDisconnect(BLEServer *pServer)
   {
     isConnected = false;
+    analogWrite(LED2_PIN, 0);
     Serial.println("onDisconnect");
     BLEDevice::startAdvertising();
     pCharacteristic->setValue("normal");
