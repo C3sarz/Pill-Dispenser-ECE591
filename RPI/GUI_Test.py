@@ -1,9 +1,16 @@
-from Tkinter import *
+from tkinter import *
+from tkcalendar import Calendar
+
 # import the needed modules from Tkinter
 import tkFont
 import tkMessageBox
 import RPi.GPIO as GPIO
 import time
+
+
+#/////////////////////////////////////
+# Motor Code
+#/////////////////////////////////////
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
@@ -32,6 +39,11 @@ GPIO.setup(coil_B_1_pin, GPIO.OUT)
 GPIO.setup(coil_B_2_pin, GPIO.OUT)
 
 GPIO.output(enable_pin, 1)
+
+
+#//////////////////////////////
+#Main GUI Code
+#//////////////////////////////
 
 # create our main window
 win = Tk()
@@ -87,6 +99,7 @@ testButton = Button(win, text = "Dispense", command = textChange, font = myFont,
 # Put button at the top position, other positions: LEFT, RIGHT, BOTTOM
 testButton.grid(row=10, column=10)
 
+# Create calendar to view Google Calender events
 
 
 mainloop()
