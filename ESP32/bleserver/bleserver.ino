@@ -14,8 +14,16 @@
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
 
-#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define BRACELET_SERVICE_UUID     "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define ALERT_SERVICE_UUID        "ad7cb91c-a5b2-406c-b3ee-f7f012d695d5"
+
+
+#define CHARACTERISTIC_UUID       "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define NEXT_DISPENSE_TIME_UUID   "58aeaf50-462d-44d0-8126-4a67a94d0f13"
+#define RTC_TIME_UUID             "96a70179-ecff-4ac1-a77e-fbb455642469"
+#define BATTERY_PERCENT_UUID      "bd56315d-307c-4e55-87f7-9aa97dcab6e4"
+#define VIBRATION_INTENSITY_UUID  "f92ac116-5f97-4603-8e3d-1867a7c11521"
+
 unsigned long dispTimer = 0;
 unsigned long timer1 = 0;
 static bool disp = false;
@@ -25,7 +33,8 @@ unsigned int dispCount = 0;
 static char serverMessage[1000] = "defaultValue";
 
 BLEServer *pServer;
-BLEService *pService;
+BLEService *pAlertService;
+BLEService *pBraceletService;
 BLECharacteristic *pCharacteristic;
 
 class ServerCallback : public BLEServerCallbacks
@@ -68,17 +77,19 @@ void setup()
   pinMode(0, INPUT);
   
   BLEDevice::init("Alert-Bracelet");
-  pServer = BLEDevice::createServer();
-  pService = pServer->createService(SERVICE_UUID);
-  pCharacteristic = pService->createCharacteristic(
+  pServer = BLEDevice::createServer();  
+  pAlertService = pServer->createService(ALERT_SERVICE_UUID);  
+  pBraceletService = pServer->createService(BRACELET_SERVICE_UUID);
+  pCharacteristic = pAlertService->createCharacteristic(
                                          CHARACTERISTIC_UUID,
                                          BLECharacteristic::PROPERTY_READ |
                                          BLECharacteristic::PROPERTY_WRITE
                                        );
-  pService->start();
+  pAlertService->start();
   //BLEAdvertising *pAdvertising = pServer->getAdvertising();
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->addServiceUUID(BRACELET_SERVICE_UUID);
+  pAdvertising->addServiceUUID(ALERT_SERVICE_UUID);
   pAdvertising->setScanResponse(true);
   pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
   pAdvertising->setMinPreferred(0x12);
