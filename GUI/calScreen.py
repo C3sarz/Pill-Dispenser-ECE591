@@ -9,7 +9,7 @@ root = Tk()
 root.geometry("800x480")
 #root.attributes("-fullscreen", True)
 
-background_image = PhotoImage(file = "/home/pi/GUI/images/sea_lowres.png")
+background_image = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/sea_lowres.png")
 background_label = Label(root, image=background_image)
 background_label.place(x=0, y=0, relwidth=1, relheight=1)
 
