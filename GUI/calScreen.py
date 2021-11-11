@@ -6,7 +6,12 @@ from tkcalendar import Calendar
 root = Tk()
 
 # Set geometry
-root.geometry("400x400")
+root.geometry("800x480")
+#root.attributes("-fullscreen", True)
+
+background_image = PhotoImage(file = "/home/pi/GUI/images/sea_lowres.png")
+background_label = Label(root, image=background_image)
+background_label.place(x=0, y=0, relwidth=1, relheight=1)
 
 # Add Calendar
 cal = Calendar(root, selectmode = 'day',
@@ -27,4 +32,3 @@ date.pack(pady = 20)
 
 # Execute Tkinter
 root.mainloop()
-
