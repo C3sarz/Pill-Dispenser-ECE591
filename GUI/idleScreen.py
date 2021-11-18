@@ -24,7 +24,7 @@ speaker_ico = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/speak
 # This function is used to
 # display time on the label
 def time():
-    string = strftime('%H:%M:%S %p')
+    string = strftime('%m %d, %Y / %H:%M:%S %p')
     canvas.itemconfigure(lbl, text = string)
     canvas.after(1000, time)
     
