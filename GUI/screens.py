@@ -4,7 +4,7 @@ from tkinter import ttk
 import time
 import RPi.GPIO as GPIO
 import threading
-import Queue
+#import Queue
 
 
 #############################################
@@ -172,23 +172,34 @@ def New_Window():
             
         dispense_onetime = 0  # to make sure only dispense one time      
         last_day = 0
-        current_day = int(time.strftime("%d"))
-        
+        current_day = int(time.strftime("%d")) # get the current date
+        set_hour = int(hour.get())
+        set_ap = am_pm.get()
+
         while (last_day==0):
             # case when start month is equal to end month
             if(int(time.strftime("%m")) == start) and (start == end):
+                # reset dispense check to 0 for a new day
+                if(int(time.strftime("%d")) > current_day):
+                    current_day += 1
+                    set_hour = int(hour.get()) # reset hour and ap to original values for the new day
+                    set_ap = am_pm.get()
+                    dispense_onetime = 0
+                    
                 if(int(time.strftime("%d")) >= int(start_day.get())) and (int(time.strftime("%d")) <= int(end_day.get())):
-                    if(time.strftime("%p") == am_pm.get()):
-                        if(int(current_hour) == int(hour.get())):
-                            if(int(time.strftime("%M")) == int(minute.get())):
-                                # reset dispense check to 0 for a new day
-                                if(int(time.strftime("%d")) > current_day):
-                                    current_day += 1
-                                    dispense_onetime = 0
-                                
+                    if(time.strftime("%p") == set_ap):
+                        # reset the dispense_time for time interval
+                        if(int(time.strftime("%I")) <= set_hour) and (dispense_onetime == 1):
+                            dispense_time = 0
+                        if(int(time.strftime("%I")) == set_hour):
+                            if(int(time.strftime("%M")) == int(minute.get())):                    
                                 if (dispense_onetime == 0):
                                     dispense(3/1000.0, 128)
                                     dispense_onetime = 1
+                                    set_hour += int(repeat.get())
+                                    if(set_ap == "AM") and (set_hour > 12):
+                                        set_ap == "PM"
+                                        set_hour -= 12
             
             
             # case when start month is less than end month
@@ -200,6 +211,7 @@ def New_Window():
                                 if(int(time.strftime("%d")) > current_day):
                                     current_day += 1
                                     dispense_onetime = 0
+                                    # reset current day to 1 depending if the last day of a month
                                     if(start_enday == 31) and (int(time.strftime("%d")) == 31):
                                         current_day = 1
                                     elif(start_enday == 28) and (int(time.strftime("%d")) == 28):
@@ -226,9 +238,21 @@ def New_Window():
                     if(time.strftime("%p") == am_pm.get()):
                         if(int(current_hour) == int(hour.get())):
                             if(int(time.strftime("%M")) == int(minute.get())):
+                                if(int(time.strftime("%d")) > current_day):
+                                    current_day += 1
+                                    dispense_onetime = 0
+                                    # reset current day to 1 depending if the last day of a month
+                                    if(e_day == 31) and (int(time.strftime("%d")) == 31):
+                                        current_day = 1
+                                    elif(e_day == 28) and (int(time.strftime("%d")) == 28):
+                                        current_day = 1
+                                    elif(e_day == 30) and (int(time.strftime("%d")) == 28):
+                                        current_day = 1
+                                    
                                 if (dispense_onetime == 0):
                                     dispense(3/1000.0, 128)
                                     dispense_onetime = 1
+
                                     
             # case for the last month                        
             elif (start < end) and (int(time.strftime("%m")) == end):
@@ -236,9 +260,17 @@ def New_Window():
                     if(time.strftime("%p") == am_pm.get()):
                         if(int(current_hour) == int(hour.get())):
                             if(int(time.strftime("%M")) == int(minute.get())):
-                                if (dispense_onetime == 0):
+                                if(int(time.strftime("%d")) > current_day):
+                                    current_day += 1
+                                    dispense_onetime = 0
+                                
+                                if(dispense_onetime == 0):
                                     dispense(3/1000.0, 128)
                                     dispense_onetime = 1
+            # break the while loop
+            else:
+                last_day = 1
+                                    
                 
         # add the above value to database
     
@@ -330,7 +362,7 @@ def New_Window():
     label_minute = tk.Label(Window, text="Minute:")
     label_minute.grid(row=6, column=0)
     
-    minute = ttk.Combobox(Window, values=["00", "15", "30", "45", "12", "47"], width=14)
+    minute = ttk.Combobox(Window, values=["00", "15", "30", "45", "12", "44"], width=14)
     minute.grid(row=6, column=1)
     minute.current(0)
     
@@ -394,31 +426,6 @@ ws = tk.Tk()
 ws.title("Home Page")
 ws.geometry("800x480")
 ws.attributes("-fullscreen", True)
-
-
-##################################
-#c = Canvas(ws, borderwidth=1, width=100, height=480)
-# c.pack(expand=YES, fill=BOTH)
-
-# # Load images
-# background_image = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/beach.png")
-# bat60 = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/bat60.png")
-# wifi5 = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/wifi_d5.png")
-# wrench_ico = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/wrench_plus.png")
-# speaker_ico = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/speaker.png")
-
-# #Sidebar code
-# sidebar = c.create_rectangle(750, 0, 800, 480, fill='gray')
-# wifi_icon = c.create_image(776, 26, image=wifi5)
-# bat_icon = c.create_image(777, 80, image=bat60)
-# settings_icon = c.create_image(775, 140, image=wrench_ico)
-# sound_icon = c.create_image(775, 200, image=speaker_ico)
-# c.pack()
-
-
-##################################
-
-
 
 # current clock display
 my_label = tk.Label(ws, text="", font=("Helvetica", 30), fg="white", bg="black")
