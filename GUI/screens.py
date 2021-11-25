@@ -2,18 +2,61 @@ from tkinter import *
 import tkinter as tk
 from tkinter import ttk
 import time
-from time import strftime
-import datetime
+import RPi.GPIO as GPIO
+import threading
+import Queue
 
-ws = tk.Tk()
-canvas = tk.Canvas(ws, height=300, width=600)
 
-# Load images
-background_image = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/beach.png")
-bat60 = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/bat60.png")
-wifi5 = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/wifi_d5.png")
-wrench_ico = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/wrench_plus.png")
-speaker_ico = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/speaker.png")
+#############################################
+#     GPIO Code
+#############################################
+
+# set GPIOs for the motor
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+enable_pin = 18; # add the enable pin
+coil_A_1_pin = 4 # pink
+coil_A_2_pin = 17 # orange
+coil_B_1_pin = 23 # blue
+coil_B_2_pin = 24 # yellow
+
+# adjust if different
+StepCount = 8
+Seq = list(range(0, StepCount))
+Seq[0] = [0,1,0,0]
+Seq[1] = [0,1,0,1]
+Seq[2] = [0,0,0,1]
+Seq[3] = [1,0,0,1]
+Seq[4] = [1,0,0,0]
+Seq[5] = [1,0,1,0]
+Seq[6] = [0,0,1,0]
+Seq[7] = [0,1,1,0]
+ 
+GPIO.setup(enable_pin, GPIO.OUT)
+GPIO.setup(coil_A_1_pin, GPIO.OUT)
+GPIO.setup(coil_A_2_pin, GPIO.OUT)
+GPIO.setup(coil_B_1_pin, GPIO.OUT)
+GPIO.setup(coil_B_2_pin, GPIO.OUT)
+ 
+GPIO.output(enable_pin, 1)
+
+def setStep(w1, w2, w3, w4):
+    GPIO.output(coil_A_1_pin, w1)
+    GPIO.output(coil_A_2_pin, w2)
+    GPIO.output(coil_B_1_pin, w3)
+    GPIO.output(coil_B_2_pin, w4)
+    
+def dispense(delay, steps):
+    for i in range(steps):
+        for j in range(StepCount):
+            setStep(Seq[j][0], Seq[j][1], Seq[j][2], Seq[j][3])
+            time.sleep(delay)
+
+
+
+#############################################
+#     Clock
+#############################################
 
 def clock():
     # get the current time
@@ -31,23 +74,183 @@ def clock():
     my_label1.config(text=mon + "," + d)
     #my_label1.after(1000, clock), this will cause freeze problem
     
-## Alternate clock function to make it a label with transparent background    
-#def clock():
-#    string = strftime('%m %d, %Y / %H:%M:%S %p')
-#    canvas.itemconfigure(lbl, text = string)
-#    canvas.after(1000, time)  
+# Note: also need to add the function of time interval, number of pills    
 
-# new window to set up the schedule    
+
+
+#############################################
+#     Scheduling Window
+#############################################
+
+
+# Schedule page
 def New_Window():
+    
+    # once the set up schdeule matches the current time, trigger the dispensing function
+#     def dispense():
+     
+    def time_check():
+                
+        current_month = time.strftime("%m")
+        current_day = time.strftime("%d")
+        current_hour = time.strftime("%I")
+        current_ap = time.strftime("%p")
+        
+        if(start_month.get() == "Jan"):
+            start = 1
+            start_enday = 31
+        elif(start_month.get() == "Feb"):
+            start = 2
+            start_enday = 28
+        elif(start_month.get() == "Mar"):
+            start = 3
+            start_enday = 31
+        elif(start_month.get() == "Apr"):
+            start = 4
+            start_enday = 30
+        elif(start_month.get() == "May"):
+            start = 5
+            start_enday = 31
+        elif(start_month.get() == "June"):
+            start = 6
+            start_enday = 30
+        elif(start_month.get() == "July"):
+            start = 7
+            start_enday = 31
+        elif(start_month.get() == "Aug"):
+            start = 8
+            start_enday = 31
+        elif(start_month.get() == "Sep"):
+            start = 9
+            start_enday = 30
+        elif(start_month.get() == "Oct"):
+            start = 10
+            start_enday = 31
+        elif(start_month.get() == "Nov"):
+            start = 11
+            start_enday = 30
+        elif(start_month.get() == "Dec"):
+            start = 12
+            start_enday = 31
+            
+        if(end_month.get() == "Jan"):
+            end = 1
+            end_enday = 31
+        elif(end_month.get() == "Feb"):
+            end = 2
+            end_enday = 28
+        elif(end_month.get() == "Mar"):
+            end = 3
+            end_enday = 31
+        elif(end_month.get() == "Apr"):
+            end = 4
+            end_enday = 30
+        elif(end_month.get() == "May"):
+            end = 5
+            end_enday = 31
+        elif(end_month.get() == "June"):
+            end = 6
+            end_enday = 30
+        elif(end_month.get() == "July"):
+            end = 7
+            end_enday = 31
+        elif(end_month.get() == "Aug"):
+            end = 8
+            end_enday = 31
+        elif(end_month.get() == "Sep"):
+            end = 9
+            end_enday = 30
+        elif(end_month.get() == "Oct"):
+            end = 10
+            end_enday = 31
+        elif(end_month.get() == "Nov"):
+            end = 11
+            end_enday = 30
+        elif(end_month.get() == "Dec"):
+            end = 12
+            end_enday = 31
+            
+        dispense_onetime = 0  # to make sure only dispense one time      
+        last_day = 0
+        current_day = int(time.strftime("%d"))
+        
+        while (last_day==0):
+            # case when start month is equal to end month
+            if(int(time.strftime("%m")) == start) and (start == end):
+                if(int(time.strftime("%d")) >= int(start_day.get())) and (int(time.strftime("%d")) <= int(end_day.get())):
+                    if(time.strftime("%p") == am_pm.get()):
+                        if(int(current_hour) == int(hour.get())):
+                            if(int(time.strftime("%M")) == int(minute.get())):
+                                # reset dispense check to 0 for a new day
+                                if(int(time.strftime("%d")) > current_day):
+                                    current_day += 1
+                                    dispense_onetime = 0
+                                
+                                if (dispense_onetime == 0):
+                                    dispense(3/1000.0, 128)
+                                    dispense_onetime = 1
+            
+            
+            # case when start month is less than end month
+            elif(int(time.strftime("%m")) == start) and (start < end):
+                if(int(time.strftime("%d")) >= int(start_day.get())) and (int(time.strftime("%d")) <= start_enday):
+                    if(time.strftime("%p") == am_pm.get()):
+                        if(int(current_hour) == int(hour.get())):
+                            if(int(time.strftime("%M")) == int(minute.get())):
+                                if(int(time.strftime("%d")) > current_day):
+                                    current_day += 1
+                                    dispense_onetime = 0
+                                    if(start_enday == 31) and (int(time.strftime("%d")) == 31):
+                                        current_day = 1
+                                    elif(start_enday == 28) and (int(time.strftime("%d")) == 28):
+                                        current_day = 1
+                                    elif(start_enday == 30) and (int(time.strftime("%d")) == 30):
+                                        current_day = 1 
+                                
+                                if (dispense_onetime == 0):
+                                    dispense(3/1000.0, 128)
+                                    dispense_onetime = 1
+                                    
+            # case when between the start month and end month
+            
+            # add code to update dispense_onetime to 0
+            elif (int(time.strftime("%m")) > start) and (int(time.strftime("%m")) < end):
+                if ( (int(time.strftime("%m")) == 1) or (int(time.strftime("%m")) == 3) or (int(time.strftime("%m")) == 5) or (int(time.strftime("%m")) == 7) or (int(time.strftime("%m")) == 8) or (int(time.strftime("%m")) == 10) or (int(time.strftime("%m")) == 12)):
+                    e_day= 31
+                elif(int(time.strftime("%m")) == 2):
+                    e_day = 28
+                elif((int(time.strftime("%m")) == 4) or (int(time.strftime("%m")) == 6) or (int(time.strftime("%m")) == 9) or (int(time.strftime("%m")) == 11)):
+                    e_day = 30
+                
+                if(int(time.strftime("%d")) >= 1) and (int(time.strftime("%d")) <= e_day):
+                    if(time.strftime("%p") == am_pm.get()):
+                        if(int(current_hour) == int(hour.get())):
+                            if(int(time.strftime("%M")) == int(minute.get())):
+                                if (dispense_onetime == 0):
+                                    dispense(3/1000.0, 128)
+                                    dispense_onetime = 1
+                                    
+            # case for the last month                        
+            elif (start < end) and (int(time.strftime("%m")) == end):
+                if(int(time.strftime("%d")) >= 1) and (int(time.strftime("%d")) <= int(end_day.get())):
+                    if(time.strftime("%p") == am_pm.get()):
+                        if(int(current_hour) == int(hour.get())):
+                            if(int(time.strftime("%M")) == int(minute.get())):
+                                if (dispense_onetime == 0):
+                                    dispense(3/1000.0, 128)
+                                    dispense_onetime = 1
+                
+        # add the above value to database
     
     def confirm():
         confirm_time_start.config(text="Start:" + start_month.get() + "," + start_day.get() + "," + hour.get() + ":" + minute.get() + "," + am_pm.get())
-        confirm_time_end.config(text="End:" + end_month.get() + "," + end_day.get() + "," + hour.get() + ":" + minute.get() + ", " + am_pm.get())
+        confirm_time_end.config(text="End:" + end_month.get() + "," + end_day.get() + "," + hour.get() + ":" + minute.get() + "," + am_pm.get())
         events.insert((events.size()+1), "Start day:" + start_month.get() + ", " + start_day.get() + ", " + hour.get() + ":" + minute.get() + ", " + am_pm.get() + "   End day:" + end_month.get() + ", " + end_day.get() + ", " + hour.get() + ":" + minute.get() + ", " + am_pm.get() )
-        # add the above value to database
+        threading.Thread(target=time_check).start()
         
     def clear_time():
-        confirm_time.config(text="")
+        confirm_time_start.config(text="")
+        confirm_time_end.config(text="")
         # remove the time string from the database
     
     def change_startdays():
@@ -127,13 +330,13 @@ def New_Window():
     label_minute = tk.Label(Window, text="Minute:")
     label_minute.grid(row=6, column=0)
     
-    minute = ttk.Combobox(Window, values=["00", "15", "30", "45"], width=14)
+    minute = ttk.Combobox(Window, values=["00", "15", "30", "45", "12", "47"], width=14)
     minute.grid(row=6, column=1)
     minute.current(0)
     
     
-    am_pm = tk.Label(Window, text ="AM/PM:")
-    am_pm.grid(row=7, column=0)
+    label_am_pm = tk.Label(Window, text ="AM/PM:")
+    label_am_pm.grid(row=7, column=0)
     
     am_pm = ttk.Combobox(Window, values=["AM", "PM"], width=14)
     am_pm.grid(row=7, column=1)
@@ -171,20 +374,51 @@ def New_Window():
     confirm_time_end = tk.Label(Window, text="")
     confirm_time_end.grid(row=13, column=1)
     
-    canvas = tk.Canvas(Window, height=HEIGHT, width=WIDTH)
-    canvas.grid(row=14, column=0)
+    # canvas = tk.Canvas(Window, height=HEIGHT, width=WIDTH)
+    # canvas.grid(row=14, column=0)
     
-    
+# clear the events in the homepage   
 def clear_text():
     events.delete(0, END)
     
 HEIGHT = 400
 WIDTH = 600
 
+#############################################
+#     Main
+#############################################
+
+# Home page
+
 ws = tk.Tk()
 ws.title("Home Page")
 ws.geometry("800x480")
 ws.attributes("-fullscreen", True)
+
+
+##################################
+#c = Canvas(ws, borderwidth=1, width=100, height=480)
+# c.pack(expand=YES, fill=BOTH)
+
+# # Load images
+# background_image = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/beach.png")
+# bat60 = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/bat60.png")
+# wifi5 = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/wifi_d5.png")
+# wrench_ico = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/wrench_plus.png")
+# speaker_ico = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/speaker.png")
+
+# #Sidebar code
+# sidebar = c.create_rectangle(750, 0, 800, 480, fill='gray')
+# wifi_icon = c.create_image(776, 26, image=wifi5)
+# bat_icon = c.create_image(777, 80, image=bat60)
+# settings_icon = c.create_image(775, 140, image=wrench_ico)
+# sound_icon = c.create_image(775, 200, image=speaker_ico)
+# c.pack()
+
+
+##################################
+
+
 
 # current clock display
 my_label = tk.Label(ws, text="", font=("Helvetica", 30), fg="white", bg="black")
@@ -225,15 +459,9 @@ button.pack()
 close_main = tk.Button(ws, text="Close", command=ws.destroy, bg='White', fg='Black')
 close_main.pack()
 
-#Sidebar code
-sidebar = canvas.create_rectangle(750, 0, 800, 480, fill='gray')
-wifi_icon = canvas.create_image(776, 26, image=wifi5)
-bat_icon = canvas.create_image(777, 80, image=bat60)
-settings_icon = canvas.create_image(775, 140, image=wrench_ico)
-sound_icon = canvas.create_image(775, 200, image=speaker_ico)
-
-# canvas pack
-canvas.pack(expand=YES, fill=BOTH)
+# # canvas pack
+# canvas = tk.Canvas(ws, height=300, width=600)
+# canvas.pack()
 
 
 ws.mainloop()
