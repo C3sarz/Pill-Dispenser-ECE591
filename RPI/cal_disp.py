@@ -1,15 +1,19 @@
 from __future__ import print_function
 import datetime
 import os.path
+import binascii
 import time
+
+# Google Calendar Libraries
 import pickle
 import os.path
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import textwrap
+
+# Bluetooth libraries
 from bluepy import btle
-import binascii
 
 
 # If modifying these scopes, delete the file token.json.

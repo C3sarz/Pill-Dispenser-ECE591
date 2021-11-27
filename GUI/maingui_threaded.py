@@ -8,6 +8,8 @@ import RPi.GPIO as GPIO
 import threading
 import queue
 import datetime
+
+# Google Calendar Libraries
 import os.path
 import pickle
 import os.path
@@ -15,6 +17,13 @@ from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import textwrap
+
+# BLE-related libraries
+from bluepy import btle
+import binascii
+
+months = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec"]
+bracelet_MAC_address = ""
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/calendar']
@@ -71,13 +80,13 @@ def dispense(delay, steps):
 #         + ", " + self.am_pm.get() + "   End day:" + self.end_month.get() + ", " + self.end_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() )
 
 class dispenseItem:
-    def __init__(self, cal_id, start_month, start_day, hour, minute, repetition = 0, end_month = 0, end_day = 0):
+    def __init__(self, cal_id, start_month, start_day, dispenseTime, google_cal = False, repetition = 0, end_month = 0, end_day = 0):
         self.cal_id = cal_id
         self.start_month = start_month
         self.start_day = start_day
+        self.google_cal = google_cal
 
-        self.hour = hour
-        self.minute = minute
+        self.dispenseTime = dispenseTime
         self.repetition = repetition
 
         self.end_month = end_month
@@ -88,7 +97,7 @@ class GuiPart:
     #############################################
     #     Clock
     #############################################
-    def clock(self, clock_disp, clock_disp1):
+    def clock(self):
         # get the current time
         hour = time.strftime("%I")
         minute = time.strftime("%M")
@@ -98,11 +107,12 @@ class GuiPart:
         mon = time.strftime("%B")
         d = time.strftime("%d")
         
-        clock_disp.config(text=hour + ":" + minute + ":" + second + " " + ap)
-        # clock_disp.after(1000, self.clock)
+        self.clock_disp.config(text=hour + ":" + minute + ":" + second + " " + ap)
+        self.clock_disp.after(1000, self.clock)
         
-        clock_disp1.config(text=mon + "," + d)
-        # clock_disp1.after(100000, self.clock)
+        # if int(minute) == 0:
+        self.clock_disp1.config(text=mon + " " + d)
+        # self.clock_disp1.after(100000, self.clock)
         #, this will cause freeze problem
         
         # Note: also need to add the function of time interval, number of pills    
@@ -372,6 +382,8 @@ class GuiPart:
     def confirm(self):
         self.confirm_time_start.config(text="Start:" + self.start_month.get() + "," + self.start_day.get() + "," + self.hour.get() + ":" + self.minute.get() + "," + self.am_pm.get())
         self.confirm_time_end.config(text="End:" + self.end_month.get() + "," + self.end_day.get() + "," + self.hour.get() + ":" + self.minute.get() + "," + self.am_pm.get())
+        
+        # newItem = dispenseItem(event['id'], int(dateParts[1]), int(dateParts[2]), dispenseTime)
         self.events.insert((self.events.size()+1), "Start day:" + self.start_month.get() + ", " + self.start_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() + "   End day:" + self.end_month.get() + ", " + self.end_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() )
         print("Confirmed Event: " + "Start day:" + self.start_month.get() + ", " + self.start_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() + "   End day:" + self.end_month.get() + ", " + self.end_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get())
             
@@ -404,12 +416,11 @@ class GuiPart:
         self.end_day.config(values=e_days)
         self.end_day.after(200, self.change_enddays)
 
+    def __init__(self, ws, queue, endCommand, dispEvents, clearEvents):
 
-    # clear the events in the homepage   
-    def clear_text(self):
-        self.events.delete(0, END)
+        # Object to keep track of dispensing events.
+        self.dispenseEvents = dispEvents
 
-    def __init__(self, ws, queue, endCommand):
         self._is_running = True
         self.queue = queue
         # Set up the GUI
@@ -417,14 +428,13 @@ class GuiPart:
         # ws.attributes("-fullscreen", True)
 
         # current clock display
-        clock_disp = tk.Label(ws, text="", font=("Helvetica", 30), fg="white", bg="black")
-        clock_disp.pack()
+        self.clock_disp = tk.Label(ws, text="", font=("Helvetica", 30), fg="white", bg="black")
+        self.clock_disp.pack()
 
         # show the exact date
-        clock_disp1 = tk.Label(ws, text="", font=("Helvetica", 25), fg="white", bg="black")
-        clock_disp1.pack()
-
-        self.clock(clock_disp, clock_disp1)
+        self.clock_disp1 = tk.Label(ws, text="", font=("Helvetica", 25), fg="white", bg="black")
+        self.clock_disp1.pack()        
+        self.clock()
 
         space = tk.Label(ws, text=" ")
         space.pack()
@@ -440,7 +450,7 @@ class GuiPart:
         space_1 = tk.Label(ws, text=" ")
         space_1.pack()
 
-        button_clear = tk.Button(ws, text="Clear events", command=self.clear_text, bg='White', fg='Black')
+        button_clear = tk.Button(ws, text="Clear events", command=clearEvents, bg='White', fg='Black')
         button_clear.pack()
 
         space_2 = tk.Label(ws, text=" ")
@@ -454,18 +464,21 @@ class GuiPart:
 
         close_main = tk.Button(ws, text="Close", command=endCommand, bg='White', fg='Black')
         close_main.pack()
-        # self._is_running = False
 
     def processIncoming(self):
         """Handle all messages currently in the queue, if any."""
         while self.queue.qsize(  ):
             try:
                 msg = self.queue.get(0)
-                # Check contents of message and do whatever is needed. As a
-                # simple test, print it (in real life, you would
-                # suitably update the GUI's display in a richer fashion).
-                # self.events.insert((self.events.size()+1),msg)
-                # print("Message from queue: " + msg)
+                if msg == 'update':
+                    print("----processing----")
+                    print(self.dispenseEvents)
+                    self.events.delete(0, self.events.size())
+                    # self.dispenseEvents = msg
+                    for item in self.dispenseEvents:
+                        listString = "Date:" + months[item.start_month-1] + " " + str(item.start_day) + ", at " + item.dispenseTime
+                        self.events.insert(END,"DispTime: " + listString)
+
             except queue.Empty:
                 # just on general principles, although we don't
                 # expect this branch to be taken in this case
@@ -495,10 +508,9 @@ class ThreadedClient:
         self.queue = queue.Queue(  )
 
         # Set up the GUI part
-        self.gui = GuiPart(master, self.queue, self.endApplication)
+        self.gui = GuiPart(master, self.queue, self.endApplication, self.dispenseEvents, self.clearEvents)
 
-        # Set up the thread to do asynchronous I/O
-        # More threads can also be created and used, if necessary
+        # Set up the threads to do asynchronous I/O
         self.running = 1
         self.dispenseThread = threading.Thread(target=self.dispenseCheckWorkerThread)
         self.calendarThread = threading.Thread(target=self.calendarWorkerThread)
@@ -508,6 +520,19 @@ class ThreadedClient:
         # Start the periodic call in the GUI to check if the queue contains
         # anything
         self.periodicCall(  )
+
+    def clearEvents(self, modifier = 'all', eventList = []):
+        print(self.dispenseEvents)
+        print("------------BEFORE CLEAR COMMAND------------------")
+        if modifier == 'all':
+            self.dispenseEvents.clear()
+        elif modifier == 'list':
+            if eventList:
+                for item in eventList:
+                    self.dispenseEvents.remove(item)
+        print(self.dispenseEvents)
+        print("------------AFTER CLEAR COMMAND------------------")
+        self.queue.put('update')
 
     def periodicCall(self):
         """
@@ -534,7 +559,7 @@ class ThreadedClient:
             time.sleep(5)
             # msg = "test"
             # self.queue.put(msg)
-            print("dispenseChack")
+            print("dispenseCheck")
         print("dispenseCheck worker dying")
 
     def calendarWorkerThread(self):
@@ -579,7 +604,6 @@ class ThreadedClient:
             for event in events:
                 start = event['start'].get('dateTime', event['start'].get('date'))
                 if 'PILL' in event['summary']:
-                    # dispenseEvents.append(event)
 
                     # Check for duplicates
                     if self.dispenseEvents:
@@ -589,44 +613,24 @@ class ThreadedClient:
                                 duplicate = True
 
                         if not duplicate:
-                            print("adding new event to list")
-                            print("dateTime: " + event['start'].get('dateTime'))
                             parts = event['start'].get('dateTime').split('T')
                             dateParts = parts[0].split('-')
                             dispenseTimeParts = parts[1].split(':')
-                            print(parts)
-                            print(dateParts)
-                            print("time: " + dispenseTimeParts[0] + ":" + dispenseTimeParts[1])
-                            # print("Time Zone: " + event['start'].get('timeZone'))
-                            # print("ID: " + event['id'])
+                            dispenseTime = dispenseTimeParts[0] + ":" + dispenseTimeParts[1]
 
-                            newItem = dispenseItem(event['id'], int(dateParts[1]), int(dateParts[2]), int(dispenseTimeParts[0]), int(dispenseTimeParts[1]))
-                            print(newItem)
+                            newItem = dispenseItem(event['id'], int(dateParts[1]), int(dateParts[2]), dispenseTime, True)
                             self.dispenseEvents.append(newItem)
-                            self.queue.put(newItem)
+                            self.queue.put('update')
                     else:
-                        print("adding new event to list")
-                        print("dateTime: " + event['start'].get('dateTime'))
                         parts = event['start'].get('dateTime').split('T')
                         dateParts = parts[0].split('-')
                         dispenseTimeParts = parts[1].split(':')
-                        print(parts)
-                        print(dateParts)
-                        print("time: " + dispenseTimeParts[0] + ":" + dispenseTimeParts[1])
-                        print("Time Zone: " + event['start'].get('timeZone'))
-                        print("ID: " + event['id'])
-
-                        newItem = dispenseItem(event['id'], int(dateParts[1]), int(dateParts[2]), int(dispenseTimeParts[0]), int(dispenseTimeParts[1]))
-                        print(newItem)
+                        dispenseTime = dispenseTimeParts[0] + ":" + dispenseTimeParts[1]
+                        newItem = dispenseItem(event['id'], int(dateParts[1]), int(dateParts[2]), dispenseTime, True)
                         self.dispenseEvents.append(newItem)
-                        self.queue.put(newItem)
+                        self.queue.put('update')
 
-
-
-            # else:
-            #     for event in dispenseEvents:
-            #         start = event['start'].get('dateTime', event['start'].get('date'))
-            #         print(start, event['summary'])
+        # GUI thread shutting down
         print("calendar worker dying")
 
     def braceletWorkerThread(self):
@@ -658,6 +662,7 @@ print("starting loop")
 ws.mainloop()
 print("loop done")
 
-print("threads alive: " + str(client.dispenseThread.is_alive()))
 client.endApplication()
+print("threads alive: " + str(client.dispenseThread.is_alive()))
+sys.exit(1)
 
