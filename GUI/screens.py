@@ -427,6 +427,29 @@ ws.title("Home Page")
 ws.geometry("800x480")
 ws.attributes("-fullscreen", True)
 
+# import pictures to use for background and "widgets"
+background_image = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/beach.png")
+bat60 = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/bat60.png")
+wifi5 = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/wifi_d5.png")
+wrench_ico = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/wrench_plus.png")
+speaker_ico = PhotoImage(file = "/home/pi/Pill-Dispenser-ECE591/GUI/images/speaker.png")
+
+# Background code
+bgr = tk.create_image(0, 0, image=background_image, anchor=NW)
+bgr.pack()
+
+#Sidebar code
+sidebar = tk.create_rectangle(750, 0, 800, 480, fill='gray')
+sidebar.pack()
+wifi_icon = tk.create_image(776, 26, image=wifi5)
+wifi_icon.pack()
+bat_icon = tk.create_image(777, 80, image=bat60)
+bat_icon.pack()
+settings_icon = tk.create_image(775, 140, image=wrench_ico)
+settings_icon.pack()
+sound_icon = tk.create_image(775, 200, image=speaker_ico)
+sound_icon.pack()
+
 # current clock display
 my_label = tk.Label(ws, text="", font=("Helvetica", 30), fg="white", bg="black")
 my_label.pack()
@@ -465,10 +488,5 @@ button.pack()
 
 close_main = tk.Button(ws, text="Close", command=ws.destroy, bg='White', fg='Black')
 close_main.pack()
-
-# # canvas pack
-# canvas = tk.Canvas(ws, height=300, width=600)
-# canvas.pack()
-
 
 ws.mainloop()
