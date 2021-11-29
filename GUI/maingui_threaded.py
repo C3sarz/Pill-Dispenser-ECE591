@@ -17,13 +17,29 @@ from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import textwrap
+import uuid
 
 # BLE-related libraries
 from bluepy import btle
 import binascii
 
 months = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec"]
+monthDict = {
+    "Jan":1,
+    "Feb":2,
+    "Mar":3,
+    "Apr":4,
+    "May":5,
+    "June":6,
+    "July":7,
+    "Aug":8,
+    "Sep":9,
+    "Oct":10,
+    "Nov":11,
+    "Dec":12
+}
 bracelet_MAC_address = ""
+currentlyDispensing = False
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/calendar']
@@ -80,12 +96,13 @@ def dispense(delay, steps):
 #         + ", " + self.am_pm.get() + "   End day:" + self.end_month.get() + ", " + self.end_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() )
 
 class dispenseItem:
-    def __init__(self, cal_id, start_month, start_day, dispenseTime, google_cal = False, repetition = 0, end_month = 0, end_day = 0):
+    def __init__(self, cal_id, start_month, start_day, dispenseTime, google_cal = False, numberOfPills = 1, repetition = 0, end_month = 0, end_day = 0):
         self.cal_id = cal_id
         self.start_month = start_month
         self.start_day = start_day
         self.google_cal = google_cal
 
+        self.amount = numberOfPills
         self.dispenseTime = dispenseTime
         self.repetition = repetition
 
@@ -107,17 +124,9 @@ class GuiPart:
         mon = time.strftime("%B")
         d = time.strftime("%d")
         
-        self.clock_disp.config(text=hour + ":" + minute + ":" + second + " " + ap)
-        self.clock_disp.after(1000, self.clock)
-        
-        # if int(minute) == 0:
+        self.clock_disp.config(text=hour + ":" + minute + ":" + second + " " + ap)        
         self.clock_disp1.config(text=mon + " " + d)
-        # self.clock_disp1.after(100000, self.clock)
-        #, this will cause freeze problem
-        
-        # Note: also need to add the function of time interval, number of pills    
-        
-
+        self.clock_disp.after(1000, self.clock)
 
     #############################################
     #     Scheduling Window
@@ -141,7 +150,7 @@ class GuiPart:
         
         self.start_month = ttk.Combobox(Window, values=["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec"], width = 14)
         self.start_month.grid(row=1, column=1)
-        self.start_month.current(0)
+        self.start_month.current(int(time.strftime("%m"))-1)
 
         label_startday = tk.Label(Window, text="Start Day:")
         label_startday.grid(row=2, column=0)
@@ -149,7 +158,8 @@ class GuiPart:
         self.start_day = ttk.Combobox(Window, width=14)
         self.start_day.grid(row=2, column=1)
         
-        self.change_startdays()
+        self.change_startdays()        
+        self.start_day.current(int(time.strftime("%d"))-2)
         
         # end day of the schedule
         
@@ -179,7 +189,7 @@ class GuiPart:
         label_minute = tk.Label(Window, text="Minute:")
         label_minute.grid(row=6, column=0)
         
-        self.minute = ttk.Combobox(Window, values=["00", "15", "30", "45", "12", "47"], width=14)
+        self.minute = ttk.Combobox(Window, values=["00", "15", "30", "45", "37"], width=14)
         self.minute.grid(row=6, column=1)
         self.minute.current(0)
         
@@ -223,168 +233,16 @@ class GuiPart:
         self.confirm_time_end = tk.Label(Window, text="")
         self.confirm_time_end.grid(row=13, column=1)
         
-        # canvas = tk.Canvas(Window, height=HEIGHT, width=WIDTH)
-        # canvas.grid(row=14, column=0)
-         
-        # def time_check():
-                    
-        #     current_month = time.strftime("%m")
-        #     current_day = time.strftime("%d")
-        #     current_hour = time.strftime("%I")
-        #     current_ap = time.strftime("%p")
-            
-        #     if(self.start_month.get() == "Jan"):
-        #         start = 1
-        #         start_enday = 31
-        #     elif(self.start_month.get() == "Feb"):
-        #         start = 2
-        #         start_enday = 28
-        #     elif(self.start_month.get() == "Mar"):
-        #         start = 3
-     # self.confirm_time_end   #         start_enday = 31
-        #     elif(self.start_month.get() == "Apr"):
-        #         start = 4
-        #         start_enday = 30
-        #     elif(self.start_month.get() == "May"):
-        #         start = 5
-        #         start_enday = 31
-        #     elif(self.start_month.get() == "June"):
-        #         start = 6
-        #         start_enday = 30
-        #     elif(self.start_month.get() == "July"):
-        #         start = 7
-        #         start_enday = 31
-        #     elif(self.start_month.get() == "Aug"):
-        #         start = 8
-        #         start_enday = 31
-        #     elif(self.start_month.get() == "Sep"):
-        #         start = 9
-        #         start_enday = 30
-        #     elif(self.start_month.get() == "Oct"):
-        #         start = 10
-        #         start_enday = 31
-        #     elif(self.start_month.get() == "Nov"):
-        #         start = 11
-        #         start_enday = 30
-        #     elif(self.start_month.get() == "Dec"):
-        #         start = 12
-        #         start_enday = 31
-                
-        #     if(self.end_month.get() == "Jan"):
-        #         end = 1
-        #         end_enday = 31
-        #     elif(self.end_month.get() == "Feb"):
-        #         end = 2
-        #         end_enday = 28
-        #     elif(self.end_month.get() == "Mar"):
-        #         end = 3
-        #         end_enday = 31
-        #     elif(self.end_month.get() == "Apr"):
-        #         end = 4
-        #         end_enday = 30
-        #     elif(self.end_month.get() == "May"):
-        #         end = 5
-        #         end_enday = 31
-        #     elif(self.end_month.get() == "June"):
-        #         end = 6
-        #         end_enday = 30
-        #     elif(self.end_month.get() == "July"):
-        #         end = 7
-        #         end_enday = 31
-        #     elif(self.end_month.get() == "Aug"):
-        #         end = 8
-        #         end_enday = 31
-        #     elif(self.end_month.get() == "Sep"):
-        #         end = 9
-        #         end_enday = 30
-        #     elif(self.end_month.get() == "Oct"):
-        #         end = 10
-        #         end_enday = 31
-        #     elif(self.end_month.get() == "Nov"):
-        #         end = 11
-        #         end_enday = 30
-        #     elif(self.end_month.get() == "Dec"):
-        #         end = 12
-        #         end_enday = 31
-                
-        #     dispense_onetime = 0  # to make sure only dispense one time      
-        #     last_day = 0
-        #     current_day = int(time.strftime("%d"))
-            
-        #     while (last_day==0):
-        #         # case when start month is equal to end month
-        #         if(int(time.strftime("%m")) == start) and (start == end):
-        #             if(int(time.strftime("%d")) >= int(self.start_day.get())) and (int(time.strftime("%d")) <= int(self.end_day.get())):
-        #                 if(time.strftime("%p") == self.am_pm.get()):
-        #                     if(int(current_hour) == int(self.hour.get())):
-        #                         if(int(time.strftime("%M")) == int(self.minute.get())):
-        #                             # reset dispense check to 0 for a new day
-        #                             if(int(time.strftime("%d")) > current_day):
-        #                                 current_day += 1
-        #                                 dispense_onetime = 0
-                                    
-        #                             if (dispense_onetime == 0):
-        #                                 dispense(3/1000.0, 128)
-        #                                 dispense_onetime = 1
-                
-                
-        #         # case when start month is less than end month
-        #         elif(int(time.strftime("%m")) == start) and (start < end):
-        #             if(int(time.strftime("%d")) >= int(self.start_day.get())) and (int(time.strftime("%d")) <= start_enday):
-        #                 if(time.strftime("%p") == self.am_pm.get()):
-        #                     if(int(current_hour) == int(self.hour.get())):
-        #                         if(int(time.strftime("%M")) == int(self.minute.get())):
-        #                             if(int(time.strftime("%d")) > current_day):
-        #                                 current_day += 1
-        #                                 dispense_onetime = 0
-        #                                 if(start_enday == 31) and (int(time.strftime("%d")) == 31):
-        #                                     current_day = 1
-        #                                 elif(start_enday == 28) and (int(time.strftime("%d")) == 28):
-        #                                     current_day = 1
-        #                                 elif(start_enday == 30) and (int(time.strftime("%d")) == 30):
-        #                                     current_day = 1 
-                                    
-        #                             if (dispense_onetime == 0):
-        #                                 dispense(3/1000.0, 128)
-        #                                 dispense_onetime = 1
-                                        
-        #         # case when between the start month and end month
-                
-        #         # add code to update dispense_onetime to 0
-        #         elif (int(time.strftime("%m")) > start) and (int(time.strftime("%m")) < end):
-        #             if ( (int(time.strftime("%m")) == 1) or (int(time.strftime("%m")) == 3) or (int(time.strftime("%m")) == 5) or (int(time.strftime("%m")) == 7) or (int(time.strftime("%m")) == 8) or (int(time.strftime("%m")) == 10) or (int(time.strftime("%m")) == 12)):
-        #                 e_day= 31
-        #             elif(int(time.strftime("%m")) == 2):
-        #                 e_day = 28
-        #             elif((int(time.strftime("%m")) == 4) or (int(time.strftime("%m")) == 6) or (int(time.strftime("%m")) == 9) or (int(time.strftime("%m")) == 11)):
-        #                 e_day = 30
-                    
-        #             if(int(time.strftime("%d")) >= 1) and (int(time.strftime("%d")) <= e_day):
-        #                 if(time.strftime("%p") == self.am_pm.get()):
-        #                     if(int(current_hour) == int(self.hour.get())):
-        #                         if(int(time.strftime("%M")) == int(self.minute.get())):
-        #                             if (dispense_onetime == 0):
-        #                                 dispense(3/1000.0, 128)
-        #                                 dispense_onetime = 1
-                                        
-        #         # case for the last month                        
-        #         elif (start < end) and (int(time.strftime("%m")) == end):
-        #             if(int(time.strftime("%d")) >= 1) and (int(time.strftime("%d")) <= int(self.end_day.get())):
-        #                 if(time.strftime("%p") == self.am_pm.get()):
-        #                     if(int(current_hour) == int(self.hour.get())):
-        #                         if(int(time.strftime("%M")) == int(self.minute.get())):
-        #                             if (dispense_onetime == 0):
-        #                                 dispense(3/1000.0, 128)
-        #                                 dispense_onetime = 1
-                    
-            # add the above value to database
-        
     def confirm(self):
         self.confirm_time_start.config(text="Start:" + self.start_month.get() + "," + self.start_day.get() + "," + self.hour.get() + ":" + self.minute.get() + "," + self.am_pm.get())
         self.confirm_time_end.config(text="End:" + self.end_month.get() + "," + self.end_day.get() + "," + self.hour.get() + ":" + self.minute.get() + "," + self.am_pm.get())
-        
-        # newItem = dispenseItem(event['id'], int(dateParts[1]), int(dateParts[2]), dispenseTime)
-        self.events.insert((self.events.size()+1), "Start day:" + self.start_month.get() + ", " + self.start_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() + "   End day:" + self.end_month.get() + ", " + self.end_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() )
+
+        timeAdjusted = int(self.hour.get())
+        if self.am_pm.get() == 'PM':
+            timeAdjusted += 12;
+        newItem = dispenseItem(uuid.uuid4().hex, int(monthDict[self.start_month.get()]), int(self.start_day.get()), (str(timeAdjusted) + ":" + self.minute.get()))
+        self.dispenseEvents.append(newItem)        
+        self.queue.put('update')
         print("Confirmed Event: " + "Start day:" + self.start_month.get() + ", " + self.start_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() + "   End day:" + self.end_month.get() + ", " + self.end_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get())
             
     def clear_time(self):
@@ -465,10 +323,11 @@ class GuiPart:
         close_main = tk.Button(ws, text="Close", command=endCommand, bg='White', fg='Black')
         close_main.pack()
 
-    def processIncoming(self):
+    def processIncoming(self, clearEvents):
         """Handle all messages currently in the queue, if any."""
         while self.queue.qsize(  ):
             try:
+                global currentlyDispensing
                 msg = self.queue.get(0)
                 if msg == 'update':
                     print("----processing----")
@@ -478,6 +337,17 @@ class GuiPart:
                     for item in self.dispenseEvents:
                         listString = "Date:" + months[item.start_month-1] + " " + str(item.start_day) + ", at " + item.dispenseTime
                         self.events.insert(END,"DispTime: " + listString)
+
+                elif type(msg) is dispenseItem:
+                    if not currentlyDispensing and msg in self.dispenseEvents:
+                        currentlyDispensing = True
+
+                        # dispensing actions placeholder
+
+                        #Remove used dispenseItem
+                        clearEvents('item', msg)
+                        self.queue.put('update')
+                        currentlyDispensing = False
 
             except queue.Empty:
                 # just on general principles, although we don't
@@ -500,6 +370,7 @@ class ThreadedClient:
         the GUI as well. We spawn a new thread for the worker (I/O).
         """
         self.master = master
+        global currentlyDispensing
 
         # Create the main calendar object
         self.dispenseEvents = []
@@ -510,65 +381,8 @@ class ThreadedClient:
         # Set up the GUI part
         self.gui = GuiPart(master, self.queue, self.endApplication, self.dispenseEvents, self.clearEvents)
 
-        # Set up the threads to do asynchronous I/O
-        self.running = 1
-        self.dispenseThread = threading.Thread(target=self.dispenseCheckWorkerThread)
-        self.calendarThread = threading.Thread(target=self.calendarWorkerThread)
-        self.dispenseThread.start()
-        self.calendarThread.start()
-
-        # Start the periodic call in the GUI to check if the queue contains
-        # anything
-        self.periodicCall(  )
-
-    def clearEvents(self, modifier = 'all', eventList = []):
-        print(self.dispenseEvents)
-        print("------------BEFORE CLEAR COMMAND------------------")
-        if modifier == 'all':
-            self.dispenseEvents.clear()
-        elif modifier == 'list':
-            if eventList:
-                for item in eventList:
-                    self.dispenseEvents.remove(item)
-        print(self.dispenseEvents)
-        print("------------AFTER CLEAR COMMAND------------------")
-        self.queue.put('update')
-
-    def periodicCall(self):
-        """
-        Check every 200 ms if there is something new in the queue.
-        """
-        self.gui.processIncoming()
-        if not self.running:
-            # This is the brutal stop of the system. You may want to do
-            # some cleanup before actually shutting it down.
-            print("GUI dying!")
-            self.master.destroy()
-        self.master.after(200, self.periodicCall)
-
-    def dispenseCheckWorkerThread(self):
-        """
-        This is where we handle the asynchronous I/O. For example, it may be
-        a 'select(  )'. One important thing to remember is that the thread has
-        to yield control pretty regularly, by select or otherwise.
-        """
-        while self.running:
-            # To simulate asynchronous I/O, we create a random number at
-            # random intervals. Replace the following two lines with the real
-            # thing.
-            time.sleep(5)
-            # msg = "test"
-            # self.queue.put(msg)
-            print("dispenseCheck")
-        print("dispenseCheck worker dying")
-
-    def calendarWorkerThread(self):
-        """
-        Handles all async Google Calendar functionality.
-        """
-
+        # Google Calendar Setup
         # Adapted from the Google Calendar API example provided by Google.
-        print("Started Calendar Thread")
         creds = None
         # The file token.pickle stores the user's access and refresh tokens, and is
         # created automatically when the authorization flow completes for the first
@@ -587,13 +401,71 @@ class ThreadedClient:
             with open("token.pickle", "wb") as token:
                 pickle.dump(creds, token)
 
-        service = build('calendar', 'v3', credentials=creds)
+        self.service = build('calendar', 'v3', credentials=creds)
 
+        # Set up the threads to do asynchronous I/O
+        self.running = 1
+        self.dispenseThread = threading.Thread(target=self.dispenseCheckWorkerThread)
+        self.calendarThread = threading.Thread(target=self.calendarWorkerThread)
+        self.dispenseThread.start()
+        self.calendarThread.start()
+
+        # Start the periodic call in the GUI to check if the queue contains
+        # anything
+        self.periodicCall(  )
+
+    def clearEvents(self, modifier = 'all', removedEvent = []):
+        print(self.dispenseEvents)
+        print("------------BEFORE CLEAR COMMAND------------------")
+        if modifier == 'all':
+            self.dispenseEvents.clear()
+        elif modifier == 'item':
+            if removedEvent:
+                self.dispenseEvents.remove(removedEvent)
+        print(self.dispenseEvents)
+        print("------------AFTER CLEAR COMMAND------------------")
+        self.queue.put('update')
+
+    def periodicCall(self):
+        """
+        Check every 200 ms if there is something new in the queue.
+        """
+        self.gui.processIncoming(self.clearEvents)
+        if not self.running:
+            # This is the brutal stop of the system. You may want to do
+            # some cleanup before actually shutting it down.
+            print("GUI dying!")
+            self.master.destroy()
+        self.master.after(200, self.periodicCall)
+
+    def dispenseCheckWorkerThread(self):
+        """
+        This thread continuously comapres the current time to 
+        the time inside every dispenseItem inside DispenseEvents,
+        and if it matches, we send the dispense signal into the queue.
+        """
+        while self.running:
+            print('Checking dispense time')
+            currentTime = time.strftime("%H") + ":" + time.strftime("%M")
+            for item in self.dispenseEvents:
+                if not currentlyDispensing and int(time.strftime("%d")) >= item.start_day and int(time.strftime("%m")) >= item.start_month:
+                    if currentTime == item.dispenseTime:
+                        self.queue.put(item)
+                        print('Dispense command sent')
+
+            time.sleep(5)
+        print("dispenseCheck worker dying")
+
+    def calendarWorkerThread(self):
+        """
+        Handles all async Google Calendar functionality.
+        """
+        print("Started Calendar Thread")
         while self.running:
 
             # Call the Calendar API
             now = datetime.datetime.utcnow().isoformat() + 'Z' # 'Z' indicates UTC time
-            events_result = service.events().list(calendarId='primary', timeMin=now,
+            events_result = self.service.events().list(calendarId='primary', timeMin=now,
                                                 maxResults=5, singleEvents=True,
                                                 orderBy='startTime').execute()
             events = events_result.get('items', [])
@@ -656,6 +528,7 @@ print("start")
 ws = tk.Tk()
 ws.title("Home Page")
 
+currentlyDispensing = False
 client = ThreadedClient(ws)
 
 print("starting loop")
