@@ -3,6 +3,9 @@
 #include "analogWrite.h"
 #include <BLEUtils.h>
 #include <BLEServer.h>
+#include <Esp.h>
+#include <esp_system.h>
+#include <sys/time.h>
 
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP  3        /* Time ESP32 will go to sleep (in seconds) */
@@ -10,6 +13,9 @@
 #define MOTOR_PIN 17  /* Pin for the vibration motor */
 #define LED1_PIN 26      /* Pin for LED 1 */
 #define LED2_PIN 27      /* pin for LED 2 */
+
+// RTC Code
+struct timeval tv;
 
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
