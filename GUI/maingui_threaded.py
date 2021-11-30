@@ -48,14 +48,33 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 #     GPIO Code
 #############################################
 
-# set GPIOs for the motor
+# GPIO Setup and pin assignments
 GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
-enable_pin = 18; # add the enable pin
+# GPIO.setwarnings(False)
+enable_pin = 18; # enable pin
 coil_A_1_pin = 4 # pink
 coil_A_2_pin = 17 # orange
 coil_B_1_pin = 23 # blue
 coil_B_2_pin = 24 # yellow
+
+# Peripheral Pins
+buzzer_pin = 13 # PWM Channel 1 Buzzer Pin
+laser_pin = 25 # Pin to control the tripwire laser
+chamber_led_pin = 9 # Pin to control the cylinder chamber LED
+tripwire_input_pin  = 11 # Boolean input of the tripwire status
+chamber_led_input_pin = 8 # Boolean input of the verification chamber status
+
+# GPIO Pin configuration
+GPIO.setup(enable_pin, GPIO.OUT)
+GPIO.setup(coil_A_1_pin, GPIO.OUT)
+GPIO.setup(coil_A_2_pin, GPIO.OUT)
+GPIO.setup(coil_B_1_pin, GPIO.OUT)
+GPIO.setup(coil_B_2_pin, GPIO.OUT)
+GPIO.setup(buzzer_pin, GPIO.OUT)
+GPIO.setup(laser_pin, GPIO.OUT)
+GPIO.setup(chamber_led_pin, GPIO.OUT)
+GPIO.setup(tripwire_input_pin, GPIO.IN)
+GPIO.setup(chamber_led_input_pin, GPIO.IN)
 
 # adjust if different
 StepCount = 8
@@ -68,12 +87,7 @@ Seq[4] = [1,0,0,0]
 Seq[5] = [1,0,1,0]
 Seq[6] = [0,0,1,0]
 Seq[7] = [0,1,1,0]
- 
-GPIO.setup(enable_pin, GPIO.OUT)
-GPIO.setup(coil_A_1_pin, GPIO.OUT)
-GPIO.setup(coil_A_2_pin, GPIO.OUT)
-GPIO.setup(coil_B_1_pin, GPIO.OUT)
-GPIO.setup(coil_B_2_pin, GPIO.OUT)
+
  
 GPIO.output(enable_pin, 1)
 
@@ -88,24 +102,62 @@ def dispense(delay, steps):
         for j in range(StepCount):
             setStep(Seq[j][0], Seq[j][1], Seq[j][2], Seq[j][3])
             time.sleep(delay)
+    
+
+# Returns all event entries on the database.
+def readDatabase(fileName):
+    events = []
+    file = open(fileName, 'r')
+    line = file.readline().rstrip()
 
 
 
+    while line != '-' and line != '':
+        if line == '*':
+            newItem = dispenseItem(file.readline().split(';')[0], int(file.readline().split(';')[0]), int(file.readline().split(';')[0]), int(file.readline().split(';')[0]), file.readline().split(';')[0])
+            line = file.readline().rstrip()
+            if line != '.':
+                events.append(newItem)
+        else:
+            line = file.readline().rstrip()
+    file.close()
+    return events
 
-# self.events.insert((self.events.size()+1), "Start day:" + self.start_month.get() + ", " + self.start_day.get() + ", " + self.hour.get() + ":" + self.minute.get() 
-#         + ", " + self.am_pm.get() + "   End day:" + self.end_month.get() + ", " + self.end_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() )
+# Updates the database, adding or deleting items.
+def updateDatabase(fileName, events):
+    file = open(fileName, 'w')
+
+    for item in events:
+        if not item.google_cal:
+            file.write('*\n')
+            file.write(item.cal_id + '\n')
+            file.write(str(item.start_year) + '\n')
+            file.write(str(item.start_month) + '\n')
+            file.write(str(item.start_day) + '\n')
+            file.write((item.dispenseTime) + '\n')
+            file.write('.\n')
+            file.write(str(False) + '\n')
+            file.write(str(item.numberOfPills) + '\n')
+            file.write(str(item.repetition) + '\n')
+            file.write(str(item.end_year) + '\n')
+            file.write(str(item.end_month) + '\n')
+            file.write(str(item.end_day) + '\n')
+    file.write('-')
+    file.close()
 
 class dispenseItem:
-    def __init__(self, cal_id, start_month, start_day, dispenseTime, google_cal = False, numberOfPills = 1, repetition = 0, end_month = 0, end_day = 0):
+    def __init__(self, cal_id, start_year, start_month, start_day, dispenseTime, google_cal = False, numberOfPills = 1, repetition = 0, end_year=0, end_month = 0, end_day = 0):
         self.cal_id = cal_id
+        self.start_year = start_year
         self.start_month = start_month
         self.start_day = start_day
+        self.dispenseTime = dispenseTime
         self.google_cal = google_cal
 
-        self.amount = numberOfPills
-        self.dispenseTime = dispenseTime
+        self.numberOfPills = numberOfPills
         self.repetition = repetition
 
+        self.end_year = end_year
         self.end_month = end_month
         self.end_day = end_day
 
@@ -189,7 +241,11 @@ class GuiPart:
         label_minute = tk.Label(Window, text="Minute:")
         label_minute.grid(row=6, column=0)
         
-        self.minute = ttk.Combobox(Window, values=["00", "15", "30", "45", "37"], width=14)
+        debugTime = str(int(time.strftime("%M"))+2)
+        if len(debugTime) == 1:
+            debugTime = '0' + debugTime 
+
+        self.minute = ttk.Combobox(Window, values=["00", "15", "30", "45", debugTime], width=14)
         self.minute.grid(row=6, column=1)
         self.minute.current(0)
         
@@ -240,8 +296,15 @@ class GuiPart:
         timeAdjusted = int(self.hour.get())
         if self.am_pm.get() == 'PM':
             timeAdjusted += 12;
-        newItem = dispenseItem(uuid.uuid4().hex, int(monthDict[self.start_month.get()]), int(self.start_day.get()), (str(timeAdjusted) + ":" + self.minute.get()))
-        self.dispenseEvents.append(newItem)        
+
+        if monthDict[self.start_month.get()] < int(time.strftime("%m")):
+            start_year = int(time.strftime("%Y"))+1
+        else:
+            start_year = int(time.strftime("%Y"))
+        print(start_year)
+
+        newItem = dispenseItem(uuid.uuid4().hex, start_year, int(monthDict[self.start_month.get()]), int(self.start_day.get()), (str(timeAdjusted) + ":" + self.minute.get()))
+        self.dispenseEvents.append(newItem)
         self.queue.put('update')
         print("Confirmed Event: " + "Start day:" + self.start_month.get() + ", " + self.start_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() + "   End day:" + self.end_month.get() + ", " + self.end_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get())
             
@@ -333,6 +396,10 @@ class GuiPart:
                     print("----processing----")
                     print(self.dispenseEvents)
                     self.events.delete(0, self.events.size())
+
+                    #Update database
+                    updateDatabase('data.txt', self.dispenseEvents)
+
                     # self.dispenseEvents = msg
                     for item in self.dispenseEvents:
                         listString = "Date:" + months[item.start_month-1] + " " + str(item.start_day) + ", at " + item.dispenseTime
@@ -343,6 +410,7 @@ class GuiPart:
                         currentlyDispensing = True
 
                         # dispensing actions placeholder
+                        dispense(3/1000.0,128)
 
                         #Remove used dispenseItem
                         clearEvents('item', msg)
@@ -372,11 +440,17 @@ class ThreadedClient:
         self.master = master
         global currentlyDispensing
 
-        # Create the main calendar object
-        self.dispenseEvents = []
-
         # Create the queue
         self.queue = queue.Queue(  )
+
+        # Create the main calendar object from the database
+        print('Reading DB')
+        try:
+            self.dispenseEvents = readDatabase('data.txt')
+        except Exception as inst:
+            print("Error reading database!")
+            self.dispenseEvents = []
+        print('DB read!')
 
         # Set up the GUI part
         self.gui = GuiPart(master, self.queue, self.endApplication, self.dispenseEvents, self.clearEvents)
@@ -486,11 +560,12 @@ class ThreadedClient:
 
                         if not duplicate:
                             parts = event['start'].get('dateTime').split('T')
+                            print(parts)
                             dateParts = parts[0].split('-')
                             dispenseTimeParts = parts[1].split(':')
                             dispenseTime = dispenseTimeParts[0] + ":" + dispenseTimeParts[1]
 
-                            newItem = dispenseItem(event['id'], int(dateParts[1]), int(dateParts[2]), dispenseTime, True)
+                            newItem = dispenseItem(event['id'],int(dateParts[0]), int(dateParts[1]), int(dateParts[2]), dispenseTime, True)
                             self.dispenseEvents.append(newItem)
                             self.queue.put('update')
                     else:
@@ -498,7 +573,7 @@ class ThreadedClient:
                         dateParts = parts[0].split('-')
                         dispenseTimeParts = parts[1].split(':')
                         dispenseTime = dispenseTimeParts[0] + ":" + dispenseTimeParts[1]
-                        newItem = dispenseItem(event['id'], int(dateParts[1]), int(dateParts[2]), dispenseTime, True)
+                        newItem = dispenseItem(event['id'],int(dateParts[0]), int(dateParts[1]), int(dateParts[2]), dispenseTime, True)
                         self.dispenseEvents.append(newItem)
                         self.queue.put('update')
 
@@ -537,5 +612,6 @@ print("loop done")
 
 client.endApplication()
 print("threads alive: " + str(client.dispenseThread.is_alive()))
+GPIO.cleanup()
 sys.exit(1)
 

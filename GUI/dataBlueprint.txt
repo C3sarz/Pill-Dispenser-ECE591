@@ -1,0 +1,7 @@
+*
+cal_id;9fe2c4e93f654fdbb24c02b15259716c
+start_year;2022
+start_month;6
+start_day;15
+dispenseTime;10:30
+-
