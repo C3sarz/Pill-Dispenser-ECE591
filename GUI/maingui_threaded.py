@@ -117,21 +117,21 @@ def readDatabase(fileName):
     file = open(fileName, 'r')
     line = file.readline().rstrip()
 
-
-
     while line != '-' and line != '':
         if line == '*':
-            newItem = dispenseItem(file.readline().split(';')[0], int(file.readline().split(';')[0]), int(file.readline().split(';')[0]), int(file.readline().split(';')[0]), file.readline().split(';')[0])
+            newItem = dispenseItem(file.readline().rstrip(), int(file.readline().rstrip()), int(file.readline().rstrip()), int(file.readline().rstrip()), file.readline().rstrip())
             line = file.readline().rstrip()
-            if line != '.':
-                events.append(newItem)
+            print("Appending eventID: " + newItem.cal_id)
+            events.append(newItem)
         else:
             line = file.readline().rstrip()
+
     file.close()
     return events
 
 # Updates the database, adding or deleting items.
 def updateDatabase(fileName, events):
+    print('+++ Updating Database! +++')
     file = open(fileName, 'w')
 
     for item in events:
@@ -186,11 +186,6 @@ class GuiPart:
         self.clock_disp.config(text=hour + ":" + minute + ":" + second + " " + ap)        
         self.clock_disp1.config(text=mon + " " + d)
         self.clock_disp.after(1000, self.clock)
-
-    #############################################
-    #     Scheduling Window
-    #############################################
-
 
     def arrowButtons(self, row, direction):
         if row == 0:
@@ -257,13 +252,24 @@ class GuiPart:
                 self.pills.current(int(self.pills.get())-2)
 
 
+    #############################################
+    #     Dispensing Window
+    #############################################
         
+    def dispenseWindow(self):
+        myFont_w = font.Font(size=16)
+        Window = tk.Toplevel()
+        Window.title('Dispense Window')
+        Window.attributes("-fullscreen", True)
 
+        close = tk.Button(Window, text="Back", command=Window.destroy, height=2, width=16)
+        close['font'] = myFont_w
+        close.grid(row=1, column=0)
 
-
-
-    # Schedule page
-    def New_Window(self):
+    #############################################
+    #     Scheduling Window
+    #############################################
+    def scheduleWindow(self):
         
         # open up a new window
         myFont_w = font.Font(size=16)
@@ -475,19 +481,24 @@ class GuiPart:
 
         timeAdjusted = int(self.hour.get())
         if self.am_pm.get() == 'PM':
-            timeAdjusted += 12;
+            if timeAdjusted != 12:
+                timeAdjusted += 12;
+
+        elif self.am_pm.get() == 'AM' and timeAdjusted == 12:
+            timeAdjusted = 0
 
         if monthDict[self.start_month.get()] < int(time.strftime("%m")):
             start_year = int(time.strftime("%Y"))+1
         else:
             start_year = int(time.strftime("%Y"))
-        print(start_year)
 
         newItem = dispenseItem(uuid.uuid4().hex, start_year, int(monthDict[self.start_month.get()]), int(self.start_day.get()), (str(timeAdjusted) + ":" + self.minute.get()), False, int(self.pills.get()))
         self.dispenseEvents.append(newItem)
         self.queue.put('update')
         print("Confirmed Event: " + "Start day:" + self.start_month.get() + ", " + self.start_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() + "   End day:" + self.end_month.get() + ", " + self.end_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get())
             
+        self.dispenseWindow()
+
     def clear_time(self):
         self.confirm_time_start.config(text="")
         self.confirm_time_end.config(text="")
@@ -551,15 +562,14 @@ class GuiPart:
         space_1 = tk.Label(ws, text=" ")
         space_1.pack()
 
-        button_clear = tk.Button(ws, text="Clear events", command=clearEvents, bg='White', fg='Black')
+        button_clear = tk.Button(ws, text="Clear events", command=lambda:clearEvents(), bg='White', fg='Black')
         button_clear.pack()
 
         space_2 = tk.Label(ws, text=" ")
         space_2.pack()
 
         # schedule button jump to the schdule page
-        button = tk.Button(ws, text="Schedule", bg='White', fg='Black', height = 2, width = 10,
-                                      command=lambda:self.New_Window())
+        button = tk.Button(ws, text="Schedule", bg='White', fg='Black', height = 2, width = 10, command=lambda:self.scheduleWindow())
 
         button.pack()
 
@@ -579,9 +589,24 @@ class GuiPart:
                     #Update database
                     updateDatabase('data.txt', self.dispenseEvents)
 
-                    # self.dispenseEvents = msg
+                    # Iterate though events
                     for item in self.dispenseEvents:
-                        listString = "Date:" + months[item.start_month-1] + " " + str(item.start_day) + ", at " + item.dispenseTime
+                        # Adjust time to AM/PM
+                        dispTime = int(item.dispenseTime.split(':')[0])
+                        if dispTime < 12 or dispTime == 24:
+                            ampm = "AM"
+                        else:
+                            ampm = "PM"
+                            dispTime = dispTime - 12
+                        if dispTime == 0:
+                            dispTime = 12
+                        dispTime = str(dispTime) + ':' + item.dispenseTime.split(':')[1] + ampm
+
+                        # Add to event board
+                        if item.google_cal:
+                            listString = "Date:" + months[item.start_month-1] + " " + str(item.start_day) + ", at " + dispTime + ";  From Google"
+                        else:
+                            listString = "Date:" + months[item.start_month-1] + " " + str(item.start_day) + ", at " + dispTime
                         self.events.insert(END,"DispTime: " + listString)
 
                 elif msg == 'dispensing':
@@ -667,15 +692,12 @@ class ThreadedClient:
         self.periodicCall(  )
 
     def clearEvents(self, modifier = 'all', removedEvent = []):
-        print(self.dispenseEvents)
-        print("------------BEFORE CLEAR COMMAND------------------")
         if modifier == 'all':
             self.dispenseEvents.clear()
         elif modifier == 'item':
             if removedEvent:
                 self.dispenseEvents.remove(removedEvent)
-        print(self.dispenseEvents)
-        print("------------AFTER CLEAR COMMAND------------------")
+        print("------------EVENTS CLEARED------------------")
         self.queue.put('update')
 
     def periodicCall(self):
@@ -781,6 +803,7 @@ class ThreadedClient:
 
             if not events:
                 print('No upcoming events found.')
+                time.sleep(3)
 
             for event in events:
                 start = event['start'].get('dateTime', event['start'].get('date'))
@@ -795,7 +818,6 @@ class ThreadedClient:
 
                         if not duplicate:
                             parts = event['start'].get('dateTime').split('T')
-                            print(parts)
                             dateParts = parts[0].split('-')
                             dispenseTimeParts = parts[1].split(':')
                             dispenseTime = str(int(dispenseTimeParts[0])) + ":" + dispenseTimeParts[1]
@@ -822,9 +844,9 @@ class ThreadedClient:
         """
 
         global currentlyDispensing
-
-        try:
-            while self.running:
+        
+        while self.running:
+            try:
                 print("Connecting...")
                 dev = btle.Peripheral("1c:9d:c2:82:9e:1a") # board1new
 
@@ -846,9 +868,8 @@ class ThreadedClient:
                         chtr.write(str.encode("normal"))
 
                 # time.sleep(0.1)
-        except Exception:
-            print('Error connecting')
-
+            except Exception:
+                print('Error connecting')
 
         print("braceletworker dying")   
 
