@@ -43,6 +43,7 @@ bracelet_MAC_address = ""
 currentlyDispensing = False
 dispenseTimer = 0
 dispensedPills = 0
+currentItem = []
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/calendar']
@@ -54,7 +55,7 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 # GPIO Setup and pin assignments
 GPIO.setmode(GPIO.BCM)
 # GPIO.setwarnings(False)
-enable_pin = 18; # enable pin
+motor_enable_pin = 18; # enable pin
 coil_A_1_pin = 4 # pink
 coil_A_2_pin = 17 # orange
 coil_B_1_pin = 23 # blue
@@ -64,16 +65,19 @@ coil_B_2_pin = 24 # yellow
 buzzer_pin = 13 # PWM Channel 1 Buzzer Pin
 laser_pin = 25 # Pin to control the tripwire laser
 chamber_led_pin = 9 # Pin to control the cylinder chamber LED
-tripwire_input_pin  = 11 # Boolean input of the tripwire status
+tripwire_input_pin  = 26 # Boolean input of the tripwire status
 chamber_led_input_pin = 8 # Boolean input of the verification chamber status
+enable_pin = 6
 
 # GPIO Pin configuration
-GPIO.setup(enable_pin, GPIO.OUT)
+GPIO.setup(motor_enable_pin, GPIO.OUT)
 GPIO.setup(coil_A_1_pin, GPIO.OUT)
 GPIO.setup(coil_A_2_pin, GPIO.OUT)
 GPIO.setup(coil_B_1_pin, GPIO.OUT)
 GPIO.setup(coil_B_2_pin, GPIO.OUT)
 GPIO.setup(buzzer_pin, GPIO.OUT)
+
+GPIO.setup(enable_pin, GPIO.OUT)
 GPIO.setup(laser_pin, GPIO.OUT)
 GPIO.setup(chamber_led_pin, GPIO.OUT)
 GPIO.setup(tripwire_input_pin, GPIO.IN)
@@ -92,7 +96,7 @@ Seq[6] = [0,0,1,0]
 Seq[7] = [0,1,1,0]
 
  
-GPIO.output(enable_pin, 1)
+GPIO.output(motor_enable_pin, 1)
 
 def setStep(w1, w2, w3, w4):
     GPIO.output(coil_A_1_pin, w1)
@@ -373,7 +377,7 @@ class GuiPart:
         label_minute['font'] = myFont_w
         label_minute.grid(row=5, column=1)
         
-        debugTime = str(int(time.strftime("%M"))+2)
+        debugTime = str(int(time.strftime("%M"))+1)
         if len(debugTime) == 1:
             debugTime = '0' + debugTime 
 
@@ -522,7 +526,7 @@ class GuiPart:
         self.queue = queue
         # Set up the GUI
         ws.geometry("800x480")
-        # ws.attributes("-fullscreen", True)
+        ws.attributes("-fullscreen", True)
 
         # current clock display
         self.clock_disp = tk.Label(ws, text="", font=("Helvetica", 30), fg="white", bg="black")
@@ -554,7 +558,7 @@ class GuiPart:
         space_2.pack()
 
         # schedule button jump to the schdule page
-        button = tk.Button(ws, text="Schedule", bg='White', fg='Black',
+        button = tk.Button(ws, text="Schedule", bg='White', fg='Black', height = 2, width = 10,
                                       command=lambda:self.New_Window())
 
         button.pack()
@@ -566,7 +570,6 @@ class GuiPart:
         """Handle all messages currently in the queue, if any."""
         while self.queue.qsize(  ):
             try:
-                global currentlyDispensing
                 msg = self.queue.get(0)
                 if msg == 'update':
                     print("----processing----")
@@ -581,19 +584,10 @@ class GuiPart:
                         listString = "Date:" + months[item.start_month-1] + " " + str(item.start_day) + ", at " + item.dispenseTime
                         self.events.insert(END,"DispTime: " + listString)
 
-                elif type(msg) is dispenseItem:
-                    if not currentlyDispensing and msg in self.dispenseEvents:
-                        currentlyDispensing = True
-
-
-                        # dispensing actions and checks
-                        dispense(3/1000.0,128)
-
-
-                        #Remove used dispenseItem
-                        clearEvents('item', msg)
-                        self.queue.put('update')
-                        currentlyDispensing = False
+                elif msg == 'dispensing':
+                    print("dispensing")
+                elif msg == 'dispenseError':
+                    print("dispensing ERROR")
 
             except queue.Empty:
                 # just on general principles, although we don't
@@ -617,6 +611,7 @@ class ThreadedClient:
         """
         self.master = master
         global currentlyDispensing
+        GPIO.output(enable_pin,0)
 
         # Create the queue
         self.queue = queue.Queue(  )
@@ -629,6 +624,9 @@ class ThreadedClient:
             print("Error reading database!")
             self.dispenseEvents = []
         print('DB read!')
+
+        # Bracelet Thread
+
 
         # Set up the GUI part
         self.gui = GuiPart(master, self.queue, self.endApplication, self.dispenseEvents, self.clearEvents)
@@ -659,8 +657,10 @@ class ThreadedClient:
         self.running = 1
         self.dispenseThread = threading.Thread(target=self.dispenseCheckWorkerThread)
         self.calendarThread = threading.Thread(target=self.calendarWorkerThread)
+        self.braceletThread = threading.Thread(target=self.braceletWorkerThread)
         self.dispenseThread.start()
         self.calendarThread.start()
+        self.braceletThread.start()
 
         # Start the periodic call in the GUI to check if the queue contains
         # anything
@@ -696,10 +696,14 @@ class ThreadedClient:
         the time inside every dispenseItem inside DispenseEvents,
         and if it matches, we send the dispense signal into the queue.
         """
-        currentItem = []
+        
+        global currentItem
+        global currentlyDispensing
+        global dispenseTimer
+        global dispensedPills
         while self.running:
             print('Checking dispense time')
-            currentTime = time.strftime("%H") + ":" + time.strftime("%M")
+            currentTime = str(int(time.strftime("%H"))) + ":" + time.strftime("%M")
             for item in self.dispenseEvents:
                 if not currentlyDispensing and int(time.strftime("%d")) >= item.start_day and int(time.strftime("%m")) >= item.start_month:
                     if currentTime == item.dispenseTime:
@@ -707,42 +711,57 @@ class ThreadedClient:
                         currentlyDispensing = True
                         self.queue.put('dispensing')
                         print('Dispense command sent')
+                        break
 
-            if not currentlyDispensing time.sleep(5)
+            if not currentlyDispensing:
+                print('Checking dispense time')
+                time.sleep(5)
             if currentlyDispensing:
-                if dispenseTimer == 0 && dispensedPills > item.numberOfPills:
+                if dispenseTimer == 0:
+
+                    self.clearEvents('item', currentItem)
+                    self.queue.put('update')
                     GPIO.output(enable_pin,1)
                     GPIO.output(buzzer_pin,1)
                     dispense(3/1000.0,128)
+                    print('rotation')
 
-                time.sleep(0.1)
-                dispenseTimer++
+                time.sleep(0.2)
+                dispenseTimer = dispenseTimer + 1
 
-                if dispenseTimer > 30 and dispensedPills > item.numberOfPills:
-                    dispensedPills++
+                if dispenseTimer > 20:
+                    print('checks')
+                    dispensedPills = dispensedPills + 1
                     dispenseTimer = 0
                     GPIO.output(buzzer_pin,0)
                     if not GPIO.input(tripwire_input_pin):
+                        print('laser')
                         self.queue.put('dispenseError')
                         dispensedPills = 0
                         dispenseTimer == 0
                         currentlyDispensing = False
+                    else:
+                        #Remove used dispenseItem
+                        dispensedPills = 0
+                        print('success')
+                        self.queue.put('dispenseSuccess')
+                        currentlyDispensing = False
+
+                    currentlyDispensing = False
                     GPIO.output(enable_pin,0)
                     time.sleep(0.1)
-                    if chamber_led_input_pin:
-                        self.queue.put('dispenseError')
-                        dispensedPills = 0
-                        dispenseTimer == 0
-                        currentlyDispensing = False
+                     # if currentlyDispensing and chamber_led_input_pin:
+                     #     print('chamber')
+                    #     self.queue.put('dispenseError')
+                    #     dispensedPills = 0
+                    #     dispenseTimer == 0
+                    #     currentlyDispensing = False
 
-
-
-                else:
-                    #Remove used dispenseItem
-                    dispensedPills = 0
-                    clearEvents('item', msg)
-                    self.queue.put('update')
-                    currentlyDispensing = False
+                    # else:
+                    #     #Remove used dispenseItem
+                    #     dispensedPills = 0
+                    #     self.queue.put('dispenseSuccess')
+                    #     currentlyDispensing = False
 
         print("dispenseCheck worker dying")
 
@@ -779,7 +798,7 @@ class ThreadedClient:
                             print(parts)
                             dateParts = parts[0].split('-')
                             dispenseTimeParts = parts[1].split(':')
-                            dispenseTime = dispenseTimeParts[0] + ":" + dispenseTimeParts[1]
+                            dispenseTime = str(int(dispenseTimeParts[0])) + ":" + dispenseTimeParts[1]
 
                             newItem = dispenseItem(event['id'],int(dateParts[0]), int(dateParts[1]), int(dateParts[2]), dispenseTime, True)
                             self.dispenseEvents.append(newItem)
@@ -788,7 +807,7 @@ class ThreadedClient:
                         parts = event['start'].get('dateTime').split('T')
                         dateParts = parts[0].split('-')
                         dispenseTimeParts = parts[1].split(':')
-                        dispenseTime = dispenseTimeParts[0] + ":" + dispenseTimeParts[1]
+                        dispenseTime = str(int(dispenseTimeParts[0])) + ":" + dispenseTimeParts[1]
                         newItem = dispenseItem(event['id'],int(dateParts[0]), int(dateParts[1]), int(dateParts[2]), dispenseTime, True)
                         self.dispenseEvents.append(newItem)
                         self.queue.put('update')
@@ -801,11 +820,37 @@ class ThreadedClient:
         This worker thread handles he connection with the bracelet device,
         and sends all necessary dispensing data.
         """
-        while self.running:
-        
 
-            self.queue.put(msg)
-        print("worker dying")   
+        global currentlyDispensing
+
+        try:
+            while self.running:
+                print("Connecting...")
+                dev = btle.Peripheral("1c:9d:c2:82:9e:1a") # board1new
+
+                print("Services...")
+                for svc in dev.services:
+                    print(str(svc))
+
+                bracelet = btle.UUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b")
+                service = dev.getServiceByUUID(bracelet)
+
+                chtruuid = btle.UUID("beb5483e-36e1-4688-b7f5-ea07361b26a8")
+                chtr = service.getCharacteristics(chtruuid)[0]
+                print(str(chtr.read()))
+                
+                while self.running:
+                    if currentlyDispensing:
+                        chtr.write(str.encode("dispensing"))
+                        time.sleep(5)
+                        chtr.write(str.encode("normal"))
+
+                # time.sleep(0.1)
+        except Exception:
+            print('Error connecting')
+
+
+        print("braceletworker dying")   
 
     def endApplication(self):
         print("end command sent")
