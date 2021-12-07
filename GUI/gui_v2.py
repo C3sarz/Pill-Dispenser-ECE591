@@ -186,6 +186,7 @@ class GuiPart:
         self.clock_disp.config(text=hour + ":" + minute + ":" + second + " " + ap)        
         self.clock_disp1.config(text=mon + " " + d)
         self.clock_disp.after(1000, self.clock)
+        
 
     def arrowButtons(self, row, direction):
         if row == 0:
@@ -257,14 +258,41 @@ class GuiPart:
     #############################################
         
     def dispenseWindow(self):
-        myFont_w = font.Font(size=16)
+        myFont_w = font.Font(size=21)
         Window = tk.Toplevel()
         Window.title('Dispense Window')
         Window.attributes("-fullscreen", True)
 
-        close = tk.Button(Window, text="Back", command=Window.destroy, height=2, width=16)
+        close = tk.Button(Window, text="Back", command=Window.destroy, height=2, width=13)
         close['font'] = myFont_w
         close.grid(row=1, column=0)
+        
+        number = tk.Label(Window, text="Number of Pills: ", height=5, width=13)
+        number['font'] = myFont_w
+        number.grid(row=1, column=1)
+        
+        amount = self.pills.get()
+        numberOfPills = tk.Text(Window, height = 8, width=13)
+        numberOfPills.insert(tk.END, amount)
+        numberOfPills['font'] = myFont_w
+        numberOfPills.grid(row=2, column=1)
+        
+        chamber_label = tk.Label(Window, text="Chamber Test", height=5, width=13)
+        chamber_label['font'] = myFont_w
+        chamber_label.grid(row=1, column=2)
+        
+        chamber_test = tk.Text(Window, height=8, width=13)
+        chamber_test['font'] = myFont_w
+        chamber_test.grid(row=2, column=2)
+        
+        tripWire_label = tk.Label(Window, text="Trip Wire Test", height=5, width=13)
+        tripWire_label['font'] = myFont_w
+        tripWire_label.grid(row=1, column=3)
+        
+        tripWire_test = tk.Text(Window, height=8, width=13)
+        tripWire_test['font'] = myFont_w
+        tripWire_test.grid(row=2, column=3)
+        
 
     #############################################
     #     Scheduling Window
@@ -530,6 +558,9 @@ class GuiPart:
 
     def __init__(self, ws, queue, endCommand, dispEvents, clearEvents):
 
+        myFont_main = font.Font(size=16)
+        
+        
         # Object to keep track of dispensing events.
         self.dispenseEvents = dispEvents
 
@@ -537,45 +568,47 @@ class GuiPart:
         self.queue = queue
         # Set up the GUI
         ws.geometry("800x480")
-        ws.attributes("-fullscreen", True)
-
+        ws.attributes("-fullscreen", True)      
+        
+        
         # current clock display
-        self.clock_disp = tk.Label(ws, text="", font=("Helvetica", 30), fg="white", bg="black")
-        self.clock_disp.pack()
+        self.clock_disp = tk.Label(ws, text="", font=("Helvetica", 50), fg="white", bg="black")
+        self.clock_disp.grid(row=0, column=0)
 
         # show the exact date
-        self.clock_disp1 = tk.Label(ws, text="", font=("Helvetica", 25), fg="white", bg="black")
-        self.clock_disp1.pack()        
+        self.clock_disp1 = tk.Label(ws, text="", font=("Helvetica", 35), fg="white", bg="black")
+        self.clock_disp1.grid(row=1, column=0)        
         self.clock()
 
         space = tk.Label(ws, text=" ")
-        space.pack()
+        space.grid(row=2, column=0)
 
         # upcoming events display
-        notice = tk.Label(ws, text="Upcoming events", font=("Helvetica", 12))
-        notice.pack()
+        notice = tk.Label(ws, text="Upcoming Events", font=("Helvetica", 24))
+        notice.grid(row=3, column=0)
 
-        self.events = tk.Listbox(ws, height = 10, width = 45, activestyle = 'none')
-        self.events.pack()
+        self.events = tk.Listbox(ws, height = 9, width = 40, activestyle = 'none', font=("Helvetica", 18))
+        self.events.grid(row=4, column=0)
 
 
-        space_1 = tk.Label(ws, text=" ")
-        space_1.pack()
+        button_clear = tk.Button(ws, text="Clear events", font=("Helvetica", 19), command=lambda:clearEvents(), bg='White', fg='Black', height=2, width=10)
+        button_clear.grid(row=0, column=1)
 
-        button_clear = tk.Button(ws, text="Clear events", command=lambda:clearEvents(), bg='White', fg='Black')
-        button_clear.pack()
-
-        space_2 = tk.Label(ws, text=" ")
-        space_2.pack()
 
         # schedule button jump to the schdule page
-        button = tk.Button(ws, text="Schedule", bg='White', fg='Black', height = 2, width = 10, command=lambda:self.scheduleWindow())
+        button = tk.Button(ws, text="Schedule", bg='White', fg='Black', font=("Helvetica", 19), height = 2, width = 10, command=lambda:self.scheduleWindow())
 
-        button.pack()
+        button.grid(row=1, column=1)
 
-        close_main = tk.Button(ws, text="Close", command=endCommand, bg='White', fg='Black')
-        close_main.pack()
+        close_main = tk.Button(ws, text="Close", command=endCommand, bg='White', fg='Black', font=("Helvetica", 19), height=2, width=10)
+        close_main.grid(row=2, column=1)
 
+        next_notice = tk.Label(ws, text="Next Event", font=("Helvetica", 24))
+        next_notice.grid(row=3, column=1)
+        
+        self.next_event = tk.Listbox(ws, height = 9, width = 38, activestyle = 'none', font=("Helvetica", 18))
+        self.next_event.grid(row=4, column=1)
+        
     def processIncoming(self, clearEvents):
         """Handle all messages currently in the queue, if any."""
         while self.queue.qsize(  ):
@@ -896,4 +929,5 @@ client.endApplication()
 print("threads alive: " + str(client.dispenseThread.is_alive()))
 GPIO.cleanup()
 sys.exit(1)
+
 
