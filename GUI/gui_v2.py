@@ -267,30 +267,29 @@ class GuiPart:
         close['font'] = myFont_w
         close.grid(row=1, column=0)
         
-        number = tk.Label(Window, text="Number of Pills: ", height=5, width=13)
+        number = tk.Label(Window, text="Number of Pills", height=5, width=13)
         number['font'] = myFont_w
         number.grid(row=1, column=1)
         
         amount = self.pills.get()
-        numberOfPills = tk.Text(Window, height = 8, width=13)
-        numberOfPills.insert(tk.END, amount)
-        numberOfPills['font'] = myFont_w
+        numberOfPills = tk.Label(Window, text=amount, height = 3, width=3)
+        numberOfPills.config(font=("Courier", 85, "italic"))
         numberOfPills.grid(row=2, column=1)
         
         chamber_label = tk.Label(Window, text="Chamber Test", height=5, width=13)
         chamber_label['font'] = myFont_w
         chamber_label.grid(row=1, column=2)
         
-        chamber_test = tk.Text(Window, height=8, width=13)
-        chamber_test['font'] = myFont_w
+        chamber_test = tk.Label(Window, text="", height=3, width=3)
+        chamber_test.config(font=("Courier", 85, "italic"))
         chamber_test.grid(row=2, column=2)
         
         tripWire_label = tk.Label(Window, text="Trip Wire Test", height=5, width=13)
         tripWire_label['font'] = myFont_w
         tripWire_label.grid(row=1, column=3)
         
-        tripWire_test = tk.Text(Window, height=8, width=13)
-        tripWire_test['font'] = myFont_w
+        tripWire_test = tk.Label(Window, height=3, width=3)
+        tripWire_test.config(font=("Courier", 85, "italic"))
         tripWire_test.grid(row=2, column=3)
         
 
@@ -572,11 +571,11 @@ class GuiPart:
         
         
         # current clock display
-        self.clock_disp = tk.Label(ws, text="", font=("Helvetica", 50), fg="white", bg="black")
+        self.clock_disp = tk.Label(ws, text="", font=("Helvetica", 55), fg="white", bg="black")
         self.clock_disp.grid(row=0, column=0)
 
         # show the exact date
-        self.clock_disp1 = tk.Label(ws, text="", font=("Helvetica", 35), fg="white", bg="black")
+        self.clock_disp1 = tk.Label(ws, text="", font=("Helvetica", 40), fg="white", bg="black")
         self.clock_disp1.grid(row=1, column=0)        
         self.clock()
 

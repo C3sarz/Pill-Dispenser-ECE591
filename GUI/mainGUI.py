@@ -54,7 +54,7 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 # GPIO Setup and pin assignments
 GPIO.setmode(GPIO.BCM)
-# GPIO.setwarnings(False)
+GPIO.setwarnings(False)
 motor_enable_pin = 18; # enable pin
 coil_A_1_pin = 4 # pink
 coil_A_2_pin = 17 # orange
@@ -97,6 +97,7 @@ Seq[7] = [0,1,1,0]
 
  
 GPIO.output(motor_enable_pin, 1)
+GPIO.output(enable_pin, 0)
 
 def setStep(w1, w2, w3, w4):
     GPIO.output(coil_A_1_pin, w1)
@@ -109,7 +110,18 @@ def dispense(delay, steps):
         for j in range(StepCount):
             setStep(Seq[j][0], Seq[j][1], Seq[j][2], Seq[j][3])
             time.sleep(delay)
-    
+
+def test_dispense_one():
+        result = 1
+        if result == 1:
+            dispense(3/1000.0, 128)
+            
+def test_dispense_six():
+        num = 1
+        while num <= 6:
+            dispense(3/1000.0, 128)
+            num += 1
+            time.sleep(1)
 
 # Returns all event entries on the database.
 def readDatabase(fileName):
@@ -257,7 +269,8 @@ class GuiPart:
     #     Dispensing Window
     #############################################
         
-    def dispenseWindow(self):
+    def dispenseWindow(self , item):
+
         myFont_w = font.Font(size=21)
         Window = tk.Toplevel()
         Window.title('Dispense Window')
@@ -267,31 +280,32 @@ class GuiPart:
         close['font'] = myFont_w
         close.grid(row=1, column=0)
         
-        number = tk.Label(Window, text="Number of Pills: ", height=5, width=13)
+        number = tk.Label(Window, text="Number of Pills", height=5, width=13)
         number['font'] = myFont_w
         number.grid(row=1, column=1)
         
-        amount = self.pills.get()
-        numberOfPills = tk.Text(Window, height = 8, width=13)
-        numberOfPills.insert(tk.END, amount)
-        numberOfPills['font'] = myFont_w
+        amount = item.numberOfPills
+        numberOfPills = tk.Label(Window, text=amount, height = 3, width=3)
+        numberOfPills.config(font=("Courier", 85, "italic"))
         numberOfPills.grid(row=2, column=1)
         
         chamber_label = tk.Label(Window, text="Chamber Test", height=5, width=13)
         chamber_label['font'] = myFont_w
         chamber_label.grid(row=1, column=2)
         
-        chamber_test = tk.Text(Window, height=8, width=13)
-        chamber_test['font'] = myFont_w
-        chamber_test.grid(row=2, column=2)
+        self.chamber_test = tk.Label(Window, text="", height=3, width=4)
+        self.chamber_test.config(font=("Courier", 60, "italic"))
+        self.chamber_test.grid(row=2, column=2)
         
         tripWire_label = tk.Label(Window, text="Trip Wire Test", height=5, width=13)
         tripWire_label['font'] = myFont_w
         tripWire_label.grid(row=1, column=3)
         
-        tripWire_test = tk.Text(Window, height=8, width=13)
-        tripWire_test['font'] = myFont_w
-        tripWire_test.grid(row=2, column=3)
+        self.tripWire_test = tk.Label(Window, height=3, width=4)
+        self.tripWire_test.config(font=("Courier", 60, "italic"))
+        self.tripWire_test.grid(row=2, column=3)
+
+        return Window
         
 
     #############################################
@@ -414,8 +428,11 @@ class GuiPart:
         debugTime = str(int(time.strftime("%M"))+1)
         if len(debugTime) == 1:
             debugTime = '0' + debugTime 
+        debugTime1 = str(int(time.strftime("%M")))
+        if len(debugTime1) == 1:
+            debugTime1 = '0' + debugTime1 
 
-        self.minute = ttk.Combobox(Window, values=["00", "15", "30", "45", debugTime], height=9, width=14)
+        self.minute = ttk.Combobox(Window, values=["00", "15", "30", "45", debugTime, debugTime1], height=9, width=14)
         self.minute['font'] = myFont_w
         self.minute.grid(row=5, column=2)
         self.minute.current(0)
@@ -524,8 +541,6 @@ class GuiPart:
         self.dispenseEvents.append(newItem)
         self.queue.put('update')
         print("Confirmed Event: " + "Start day:" + self.start_month.get() + ", " + self.start_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() + "   End day:" + self.end_month.get() + ", " + self.end_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get())
-            
-        self.dispenseWindow()
 
     def clear_time(self):
         self.confirm_time_start.config(text="")
@@ -555,6 +570,7 @@ class GuiPart:
             
         self.end_day.config(values=e_days)
         self.end_day.after(200, self.change_enddays)
+        
 
     def __init__(self, ws, queue, endCommand, dispEvents, clearEvents):
 
@@ -564,8 +580,13 @@ class GuiPart:
         # Object to keep track of dispensing events.
         self.dispenseEvents = dispEvents
 
+        # Object thatwill hold the dispensing screen instance
+        self.dispenseW = []
+
+        # Running flag and queue instances
         self._is_running = True
         self.queue = queue
+
         # Set up the GUI
         ws.geometry("800x480")
         ws.attributes("-fullscreen", True)      
@@ -606,11 +627,18 @@ class GuiPart:
         next_notice = tk.Label(ws, text="Next Event", font=("Helvetica", 24))
         next_notice.grid(row=3, column=1)
         
-        self.next_event = tk.Listbox(ws, height = 9, width = 38, activestyle = 'none', font=("Helvetica", 18))
+        self.next_event = tk.Listbox(ws, height = 9, width = 25, activestyle = 'none', font=("Helvetica", 18))
         self.next_event.grid(row=4, column=1)
+        
+        dispense_one = tk.Button(ws, text="Dispense 1", command=test_dispense_one, bg='White', fg='Black', font=("Helvetica", 19), height=2, width=9)
+        dispense_one.grid(row=0, column=2)
+        
+        dispense_six = tk.Button(ws, text="Dispense 6", command=test_dispense_six, bg='White', fg='Black', font=("Helvetica", 19), height=2, width=9)
+        dispense_six.grid(row=1, column=2)        
         
     def processIncoming(self, clearEvents):
         """Handle all messages currently in the queue, if any."""
+        global currentItem
         while self.queue.qsize(  ):
             try:
                 msg = self.queue.get(0)
@@ -644,8 +672,26 @@ class GuiPart:
 
                 elif msg == 'dispensing':
                     print("dispensing")
-                elif msg == 'dispenseError':
-                    print("dispensing ERROR")
+                    self.dispenseW = self.dispenseWindow(currentItem)
+                elif msg == 'chamberFail':
+                    print("dispensing error: CHAMBER LED")
+                    self.chamber_test['text'] = 'FAIL'
+                    self.chamber_test.config(fg="Red")
+                elif msg == 'laserFail':
+                    print("dispensing error: LASER TRIPWIRE")
+                    self.tripWire_test['text'] = 'FAIL'
+                    self.tripWire_test.config(fg="Red")
+                elif msg == 'chamberPass':
+                    print("Chamber test PASS")
+                    self.chamber_test['text'] = 'PASS'
+                    self.chamber_test.config(fg="Green")
+                elif msg == 'laserPass':
+                    print("Tripwire test PASS")
+                    self.tripWire_test['text'] = 'PASS'
+                    self.tripWire_test.config(fg="Green")
+                elif msg == 'dispenseOver':
+                    print("Destroying dispense screen...")
+                    self.dispenseW.destroy()
 
             except queue.Empty:
                 # just on general principles, although we don't
@@ -773,44 +819,51 @@ class ThreadedClient:
                 time.sleep(5)
             if currentlyDispensing:
                 if dispenseTimer == 0:
-
+                    GPIO.output(enable_pin,1)
                     self.clearEvents('item', currentItem)
                     self.queue.put('update')
-                    GPIO.output(enable_pin,1)
                     GPIO.output(buzzer_pin,1)
                     dispense(3/1000.0,128)
                     print('rotation')
 
-                time.sleep(0.2)
+                time.sleep(0.1)
                 dispenseTimer = dispenseTimer + 1
 
-                if dispenseTimer > 20:
+                if dispenseTimer > 0:
+                    GPIO.output(buzzer_pin,0)
+
+
+                if dispenseTimer > 15:
                     print('checks')
                     dispensedPills = dispensedPills + 1
                     dispenseTimer = 0
                     GPIO.output(buzzer_pin,0)
                     if not GPIO.input(tripwire_input_pin):
-                        print('laser')
-                        self.queue.put('dispenseError')
-                        dispensedPills = 0
-                        dispenseTimer == 0
-                        currentlyDispensing = False
+                        self.queue.put('laserFail')
                     else:
-                        #Remove used dispenseItem
                         dispensedPills = 0
                         print('success')
-                        self.queue.put('dispenseSuccess')
-                        currentlyDispensing = False
+                        self.queue.put('laserPass')
 
-                    currentlyDispensing = False
+
+
+                    if GPIO.input(chamber_led_input_pin):
+                        print('chamber')
+                        self.queue.put('chamberFail')
+
+                    else:
+
+                        print('success')
+                        self.queue.put('chamberPass')
+
+
+                    dispensedPills = 0
+                    dispenseTimer = 0
+                    currentlyDispensing = False                    
                     GPIO.output(enable_pin,0)
-                    time.sleep(0.1)
-                     # if currentlyDispensing and chamber_led_input_pin:
-                     #     print('chamber')
-                    #     self.queue.put('dispenseError')
-                    #     dispensedPills = 0
-                    #     dispenseTimer == 0
-                    #     currentlyDispensing = False
+                    time.sleep(3)
+                    self.queue.put('dispenseOver')
+
 
                     # else:
                     #     #Remove used dispenseItem
