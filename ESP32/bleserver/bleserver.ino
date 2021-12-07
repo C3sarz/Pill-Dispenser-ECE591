@@ -15,7 +15,7 @@
 #define LED2_PIN 27      /* pin for LED 2 */
 
 // RTC Code
-struct timeval tv;
+//struct timeval tv;
 
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/

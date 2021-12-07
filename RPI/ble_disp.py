@@ -2,8 +2,9 @@ from bluepy import btle
 import time
 import binascii
 
+
 print("Connecting...")
-dev = btle.Peripheral("7c:87:ce:13:5e:da") # board3
+dev = btle.Peripheral("1c:9d:c2:82:9e:1a") # board1new
 
 print("Services...")
 for svc in dev.services:
