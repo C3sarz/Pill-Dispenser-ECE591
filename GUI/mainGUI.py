@@ -1,6 +1,7 @@
 from __future__ import print_function
 from tkinter import *
 import tkinter as tk
+import tkinter.font as font
 from tkinter import ttk
 import sys
 import time
@@ -40,6 +41,9 @@ monthDict = {
 }
 bracelet_MAC_address = ""
 currentlyDispensing = False
+dispenseTimer = 0
+dispensedPills = 0
+currentItem = []
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/calendar']
@@ -51,7 +55,7 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 # GPIO Setup and pin assignments
 GPIO.setmode(GPIO.BCM)
 # GPIO.setwarnings(False)
-enable_pin = 18; # enable pin
+motor_enable_pin = 18; # enable pin
 coil_A_1_pin = 4 # pink
 coil_A_2_pin = 17 # orange
 coil_B_1_pin = 23 # blue
@@ -61,16 +65,19 @@ coil_B_2_pin = 24 # yellow
 buzzer_pin = 13 # PWM Channel 1 Buzzer Pin
 laser_pin = 25 # Pin to control the tripwire laser
 chamber_led_pin = 9 # Pin to control the cylinder chamber LED
-tripwire_input_pin  = 11 # Boolean input of the tripwire status
+tripwire_input_pin  = 26 # Boolean input of the tripwire status
 chamber_led_input_pin = 8 # Boolean input of the verification chamber status
+enable_pin = 6
 
 # GPIO Pin configuration
-GPIO.setup(enable_pin, GPIO.OUT)
+GPIO.setup(motor_enable_pin, GPIO.OUT)
 GPIO.setup(coil_A_1_pin, GPIO.OUT)
 GPIO.setup(coil_A_2_pin, GPIO.OUT)
 GPIO.setup(coil_B_1_pin, GPIO.OUT)
 GPIO.setup(coil_B_2_pin, GPIO.OUT)
 GPIO.setup(buzzer_pin, GPIO.OUT)
+
+GPIO.setup(enable_pin, GPIO.OUT)
 GPIO.setup(laser_pin, GPIO.OUT)
 GPIO.setup(chamber_led_pin, GPIO.OUT)
 GPIO.setup(tripwire_input_pin, GPIO.IN)
@@ -89,7 +96,7 @@ Seq[6] = [0,0,1,0]
 Seq[7] = [0,1,1,0]
 
  
-GPIO.output(enable_pin, 1)
+GPIO.output(motor_enable_pin, 1)
 
 def setStep(w1, w2, w3, w4):
     GPIO.output(coil_A_1_pin, w1)
@@ -110,21 +117,21 @@ def readDatabase(fileName):
     file = open(fileName, 'r')
     line = file.readline().rstrip()
 
-
-
     while line != '-' and line != '':
         if line == '*':
-            newItem = dispenseItem(file.readline().split(';')[0], int(file.readline().split(';')[0]), int(file.readline().split(';')[0]), int(file.readline().split(';')[0]), file.readline().split(';')[0])
+            newItem = dispenseItem(file.readline().rstrip(), int(file.readline().rstrip()), int(file.readline().rstrip()), int(file.readline().rstrip()), file.readline().rstrip())
             line = file.readline().rstrip()
-            if line != '.':
-                events.append(newItem)
+            print("Appending eventID: " + newItem.cal_id)
+            events.append(newItem)
         else:
             line = file.readline().rstrip()
+
     file.close()
     return events
 
 # Updates the database, adding or deleting items.
 def updateDatabase(fileName, events):
+    print('+++ Updating Database! +++')
     file = open(fileName, 'w')
 
     for item in events:
@@ -179,17 +186,121 @@ class GuiPart:
         self.clock_disp.config(text=hour + ":" + minute + ":" + second + " " + ap)        
         self.clock_disp1.config(text=mon + " " + d)
         self.clock_disp.after(1000, self.clock)
+        
+
+    def arrowButtons(self, row, direction):
+        if row == 0:
+            if direction == 'up' and monthDict[self.start_month.get()] <= 11:
+                self.start_month.current(monthDict[self.start_month.get()])
+            elif direction == 'down' and monthDict[self.start_month.get()]-2 >= 0:
+                self.start_month.current(monthDict[self.start_month.get()]-2)
+        elif row == 1:
+            if direction == 'up' and int(self.start_day.get())-1 <= len(self.start_day['values'])-1:
+                self.start_day.current(int(self.start_day.get())-1)
+            elif direction == 'down' and int(self.start_day.get())-3 >= 0:
+                self.start_day.current(int(self.start_day.get())-3)
+        elif row == 2:
+            if direction == 'up' and monthDict[self.end_month.get()] <= 11:
+                self.end_month.current(monthDict[self.end_month.get()])
+            elif direction == 'down' and monthDict[self.end_month.get()]-2 >= 0:
+                self.end_month.current(monthDict[self.end_month.get()]-2)
+        elif row == 3:
+            if direction == 'up' and int(self.end_day.get())-1 <= len(self.end_day['values'])-1:
+                self.end_day.current(int(self.end_day.get())-1)
+            elif direction == 'down' and int(self.end_day.get())-3 >= 0:
+                self.end_day.current(int(self.end_day.get())-3)
+        elif row == 4:
+            if direction == 'up' and int(self.hour.get()) <= 11:
+                self.hour.current(int(self.hour.get()))
+            elif direction == 'down' and int(self.hour.get())-2 >= 0:
+                self.hour.current(int(self.hour.get())-2)
+        elif row == 5:
+            newMin = int(self.minute.get())
+            if direction == 'up':
+                if newMin == 0:
+                    self.minute.current(1)
+                elif newMin == 15:
+                    self.minute.current(2)
+                elif newMin == 30:
+                    self.minute.current(3)
+                elif newMin == 45:
+                    self.minute.current(4)
+            elif direction == 'down':
+                if newMin == 0:
+                    self.minute.current(0)
+                elif newMin == 15:
+                    self.minute.current(0)
+                elif newMin == 30:
+                    self.minute.current(1)
+                elif newMin == 45:
+                    self.minute.current(2)
+                else:
+                    self.minute.current(3)
+        elif row == 6:
+            if direction == 'up':
+                self.am_pm.current(1)
+            elif direction == 'down':
+                self.am_pm.current(0)
+        elif row == 7:
+            if direction == 'up' and int(self.repeat.get())+1 <= 11:
+                self.repeat.current(int(self.repeat.get())+1)
+            elif direction == 'down' and int(self.repeat.get())-1 >= 0:
+                self.repeat.current(int(self.repeat.get())-1)
+        elif row == 8:
+            if direction == 'up' and int(self.pills.get()) <= 4:
+                self.pills.current(int(self.pills.get()))
+            elif direction == 'down' and int(self.pills.get())-2 >= 0:
+                self.pills.current(int(self.pills.get())-2)
+
+
+    #############################################
+    #     Dispensing Window
+    #############################################
+        
+    def dispenseWindow(self):
+        myFont_w = font.Font(size=21)
+        Window = tk.Toplevel()
+        Window.title('Dispense Window')
+        Window.attributes("-fullscreen", True)
+
+        close = tk.Button(Window, text="Back", command=Window.destroy, height=2, width=13)
+        close['font'] = myFont_w
+        close.grid(row=1, column=0)
+        
+        number = tk.Label(Window, text="Number of Pills: ", height=5, width=13)
+        number['font'] = myFont_w
+        number.grid(row=1, column=1)
+        
+        amount = self.pills.get()
+        numberOfPills = tk.Text(Window, height = 8, width=13)
+        numberOfPills.insert(tk.END, amount)
+        numberOfPills['font'] = myFont_w
+        numberOfPills.grid(row=2, column=1)
+        
+        chamber_label = tk.Label(Window, text="Chamber Test", height=5, width=13)
+        chamber_label['font'] = myFont_w
+        chamber_label.grid(row=1, column=2)
+        
+        chamber_test = tk.Text(Window, height=8, width=13)
+        chamber_test['font'] = myFont_w
+        chamber_test.grid(row=2, column=2)
+        
+        tripWire_label = tk.Label(Window, text="Trip Wire Test", height=5, width=13)
+        tripWire_label['font'] = myFont_w
+        tripWire_label.grid(row=1, column=3)
+        
+        tripWire_test = tk.Text(Window, height=8, width=13)
+        tripWire_test['font'] = myFont_w
+        tripWire_test.grid(row=2, column=3)
+        
 
     #############################################
     #     Scheduling Window
     #############################################
-
-
-    # Schedule page
-    def New_Window(self):
+    def scheduleWindow(self):
         
         # open up a new window
-myFont_w = font.Font(size=16)
+        myFont_w = font.Font(size=16)
         
         # open up a new window
         Window = tk.Toplevel()
@@ -213,11 +324,11 @@ myFont_w = font.Font(size=16)
         self.start_month.grid(row=0, column=2)
         self.start_month.current(int(time.strftime("%m"))-1)
         
-        button_0_0 = tk.Button(Window, text="up", height = 2, width = 10)
+        button_0_0 = tk.Button(Window, text="DOWN", height = 2, width = 10, command=lambda: self.arrowButtons(0, 'down'))
         button_0_0 ['font'] = myFont_w
         button_0_0.grid(row = 0, column = 3)
         
-        button_0_1 = tk.Button(Window, text="down", height = 2, width = 10)
+        button_0_1 = tk.Button(Window, text="UP", height = 2, width = 10, command=lambda: self.arrowButtons(0, 'up'))
         button_0_1.grid(row = 0, column = 4)
         button_0_1 ['font'] = myFont_w
 
@@ -232,11 +343,11 @@ myFont_w = font.Font(size=16)
         self.change_startdays()        
         self.start_day.current(int(time.strftime("%d"))-2)
         
-        button_1_0 = tk.Button(Window, text="up", height = 2, width = 10)
+        button_1_0 = tk.Button(Window, text="DOWN", height = 2, width = 10, command=lambda: self.arrowButtons(1, 'down'))
         button_1_0 ['font'] = myFont_w
         button_1_0.grid(row = 1, column = 3)
         
-        button_1_1 = tk.Button(Window, text="down", height = 2, width = 10)
+        button_1_1 = tk.Button(Window, text="UP", height = 2, width = 10, command=lambda: self.arrowButtons(1, 'up'))
         button_1_1 ['font'] = myFont_w
         button_1_1.grid(row = 1, column = 4)
         
@@ -249,13 +360,13 @@ myFont_w = font.Font(size=16)
         self.end_month = ttk.Combobox(Window, values=["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec"], height = 9, width = 14)
         self.end_month['font'] = myFont_w
         self.end_month.grid(row=2, column=2)
-        self.end_month.current(0)
+        self.end_month.current(int(time.strftime("%m"))-1)
         
-        button_2_0 = tk.Button(Window, text="up", height = 2, width = 10)
+        button_2_0 = tk.Button(Window, text="DOWN", height = 2, width = 10, command=lambda: self.arrowButtons(2, 'down'))
         button_2_0 ['font'] = myFont_w
         button_2_0.grid(row = 2, column = 3)
         
-        button_2_1 = tk.Button(Window, text="down", height = 2, width = 10)
+        button_2_1 = tk.Button(Window, text="UP", height = 2, width = 10, command=lambda: self.arrowButtons(2, 'up'))
         button_2_1 ['font'] = myFont_w
         button_2_1.grid(row = 2, column = 4)
         
@@ -268,12 +379,13 @@ myFont_w = font.Font(size=16)
         self.end_day.grid(row=3, column=2)    
         
         self.change_enddays()
+        self.end_day.current(int(time.strftime("%d"))-2)
         
-        button_3_0 = tk.Button(Window, text="up", height = 2, width = 10)
+        button_3_0 = tk.Button(Window, text="DOWN", height = 2, width = 10, command=lambda: self.arrowButtons(3, 'down'))
         button_3_0 ['font'] = myFont_w
         button_3_0.grid(row = 3, column = 3)
         
-        button_3_1 = tk.Button(Window, text="down", height = 2, width = 10)
+        button_3_1 = tk.Button(Window, text="UP", height = 2, width = 10, command=lambda: self.arrowButtons(3, 'up'))
         button_3_1 ['font'] = myFont_w
         button_3_1.grid(row = 3, column = 4)
         
@@ -282,16 +394,16 @@ myFont_w = font.Font(size=16)
         label_time['font'] = myFont_w
         label_time.grid(row=4, column=1)
             
-        self.hour = ttk.Combobox(Window, values=["1", "2", "4", "5", "6", "7", "8", "9", "10", "11", "12"], height = 9, width=14)
+        self.hour = ttk.Combobox(Window, values=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"], height = 9, width=14)
         self.hour['font'] = myFont_w
         self.hour.grid(row=4, column=2)
-        self.hour.current(0)
+        self.hour.current(int(time.strftime("%I"))-1)
         
-        button_4_0 = tk.Button(Window, text="up", height = 2, width = 10)
+        button_4_0 = tk.Button(Window, text="DOWN", height = 2, width = 10, command=lambda: self.arrowButtons(4, 'down'))
         button_4_0 ['font'] = myFont_w
         button_4_0.grid(row = 4, column = 3)
         
-        button_4_1 = tk.Button(Window, text="down", height = 2, width = 10)
+        button_4_1 = tk.Button(Window, text="UP", height = 2, width = 10, command=lambda: self.arrowButtons(4, 'up'))
         button_4_1 ['font'] = myFont_w
         button_4_1.grid(row = 4, column = 4)
         
@@ -299,7 +411,7 @@ myFont_w = font.Font(size=16)
         label_minute['font'] = myFont_w
         label_minute.grid(row=5, column=1)
         
-        debugTime = str(int(time.strftime("%M"))+2)
+        debugTime = str(int(time.strftime("%M"))+1)
         if len(debugTime) == 1:
             debugTime = '0' + debugTime 
 
@@ -308,11 +420,11 @@ myFont_w = font.Font(size=16)
         self.minute.grid(row=5, column=2)
         self.minute.current(0)
         
-        button_5_0 = tk.Button(Window, text="up", height = 2, width = 10)
+        button_5_0 = tk.Button(Window, text="DOWN", height = 2, width = 10, command=lambda: self.arrowButtons(5, 'down'))
         button_5_0 ['font'] = myFont_w
         button_5_0.grid(row = 5, column = 3)
         
-        button_5_1 = tk.Button(Window, text="down", height = 2, width = 10)
+        button_5_1 = tk.Button(Window, text="UP", height = 2, width = 10, command=lambda: self.arrowButtons(5, 'up'))
         button_5_1 ['font'] = myFont_w
         button_5_1.grid(row = 5, column = 4)
         
@@ -326,11 +438,11 @@ myFont_w = font.Font(size=16)
         self.am_pm.grid(row=6, column=2)
         self.am_pm.current(0)
         
-        button_6_0 = tk.Button(Window, text="up", height = 2, width = 10)
+        button_6_0 = tk.Button(Window, text="AM", height = 2, width = 10, command=lambda: self.arrowButtons(6, 'down'))
         button_6_0 ['font'] = myFont_w
         button_6_0.grid(row = 6, column = 3)
         
-        button_6_1 = tk.Button(Window, text="down", height = 2, width = 10)
+        button_6_1 = tk.Button(Window, text="PM", height = 2, width = 10, command=lambda: self.arrowButtons(6, 'up'))
         button_6_1 ['font'] = myFont_w
         button_6_1.grid(row = 6, column = 4)
         
@@ -338,16 +450,16 @@ myFont_w = font.Font(size=16)
         label_repeat['font'] = myFont_w
         label_repeat.grid(row=7, column=1)
         
-        repeat = ttk.Combobox(Window, values=["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"], height=9, width=14)
-        repeat['font'] = myFont_w
-        repeat.grid(row=7, column=2)
-        repeat.current(0)
+        self.repeat = ttk.Combobox(Window, values=["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"], height=9, width=14)
+        self.repeat['font'] = myFont_w
+        self.repeat.grid(row=7, column=2)
+        self.repeat.current(0)
         
-        button_7_0 = tk.Button(Window, text="up", height = 2, width = 10)
+        button_7_0 = tk.Button(Window, text="DOWN", height = 2, width = 10, command=lambda: self.arrowButtons(7, 'down'))
         button_7_0 ['font'] = myFont_w
         button_7_0.grid(row = 7, column = 3)
         
-        button_7_1 = tk.Button(Window, text="down", height = 2, width = 10)
+        button_7_1 = tk.Button(Window, text="UP", height = 2, width = 10, command=lambda: self.arrowButtons(7, 'up'))
         button_7_1 ['font'] = myFont_w
         button_7_1.grid(row = 7, column = 4)
 
@@ -355,16 +467,16 @@ myFont_w = font.Font(size=16)
         label_number['font'] = myFont_w
         label_number.grid(row=8, column=1)
         
-        numberOfPills = ttk.Combobox(Window, values=["1", "2", "3", "4", "5"], height=9, width=14)
-        numberOfPills['font'] = myFont_w
-        numberOfPills.grid(row=8, column=2)
-        numberOfPills.current(0)
+        self.pills = ttk.Combobox(Window, values=["1", "2", "3", "4", "5"], height=9, width=14)
+        self.pills['font'] = myFont_w
+        self.pills.grid(row=8, column=2)
+        self.pills.current(0)
         
-        button_8_0 = tk.Button(Window, text="up", height = 2, width = 10)
+        button_8_0 = tk.Button(Window, text="DOWN", height = 2, width = 10, command=lambda: self.arrowButtons(8, 'down'))
         button_8_0 ['font'] = myFont_w
         button_8_0.grid(row = 8, column = 3)
         
-        button_8_1 = tk.Button(Window, text="down", height = 2, width = 10)
+        button_8_1 = tk.Button(Window, text="UP", height = 2, width = 10, command=lambda: self.arrowButtons(8, 'up'))
         button_8_1 ['font'] = myFont_w
         button_8_1.grid(row = 8, column = 4)
 
@@ -397,19 +509,24 @@ myFont_w = font.Font(size=16)
 
         timeAdjusted = int(self.hour.get())
         if self.am_pm.get() == 'PM':
-            timeAdjusted += 12;
+            if timeAdjusted != 12:
+                timeAdjusted += 12;
+
+        elif self.am_pm.get() == 'AM' and timeAdjusted == 12:
+            timeAdjusted = 0
 
         if monthDict[self.start_month.get()] < int(time.strftime("%m")):
             start_year = int(time.strftime("%Y"))+1
         else:
             start_year = int(time.strftime("%Y"))
-        print(start_year)
 
-        newItem = dispenseItem(uuid.uuid4().hex, start_year, int(monthDict[self.start_month.get()]), int(self.start_day.get()), (str(timeAdjusted) + ":" + self.minute.get()))
+        newItem = dispenseItem(uuid.uuid4().hex, start_year, int(monthDict[self.start_month.get()]), int(self.start_day.get()), (str(timeAdjusted) + ":" + self.minute.get()), False, int(self.pills.get()))
         self.dispenseEvents.append(newItem)
         self.queue.put('update')
         print("Confirmed Event: " + "Start day:" + self.start_month.get() + ", " + self.start_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get() + "   End day:" + self.end_month.get() + ", " + self.end_day.get() + ", " + self.hour.get() + ":" + self.minute.get() + ", " + self.am_pm.get())
             
+        self.dispenseWindow()
+
     def clear_time(self):
         self.confirm_time_start.config(text="")
         self.confirm_time_end.config(text="")
@@ -441,6 +558,9 @@ myFont_w = font.Font(size=16)
 
     def __init__(self, ws, queue, endCommand, dispEvents, clearEvents):
 
+        myFont_main = font.Font(size=16)
+        
+        
         # Object to keep track of dispensing events.
         self.dispenseEvents = dispEvents
 
@@ -448,51 +568,51 @@ myFont_w = font.Font(size=16)
         self.queue = queue
         # Set up the GUI
         ws.geometry("800x480")
-        # ws.attributes("-fullscreen", True)
-
+        ws.attributes("-fullscreen", True)      
+        
+        
         # current clock display
-        self.clock_disp = tk.Label(ws, text="", font=("Helvetica", 30), fg="white", bg="black")
-        self.clock_disp.pack()
+        self.clock_disp = tk.Label(ws, text="", font=("Helvetica", 50), fg="white", bg="black")
+        self.clock_disp.grid(row=0, column=0)
 
         # show the exact date
-        self.clock_disp1 = tk.Label(ws, text="", font=("Helvetica", 25), fg="white", bg="black")
-        self.clock_disp1.pack()        
+        self.clock_disp1 = tk.Label(ws, text="", font=("Helvetica", 35), fg="white", bg="black")
+        self.clock_disp1.grid(row=1, column=0)        
         self.clock()
 
         space = tk.Label(ws, text=" ")
-        space.pack()
+        space.grid(row=2, column=0)
 
         # upcoming events display
-        notice = tk.Label(ws, text="Upcoming events", font=("Helvetica", 12))
-        notice.pack()
+        notice = tk.Label(ws, text="Upcoming Events", font=("Helvetica", 24))
+        notice.grid(row=3, column=0)
 
-        self.events = tk.Listbox(ws, height = 10, width = 45, activestyle = 'none')
-        self.events.pack()
+        self.events = tk.Listbox(ws, height = 9, width = 40, activestyle = 'none', font=("Helvetica", 18))
+        self.events.grid(row=4, column=0)
 
 
-        space_1 = tk.Label(ws, text=" ")
-        space_1.pack()
+        button_clear = tk.Button(ws, text="Clear events", font=("Helvetica", 19), command=lambda:clearEvents(), bg='White', fg='Black', height=2, width=10)
+        button_clear.grid(row=0, column=1)
 
-        button_clear = tk.Button(ws, text="Clear events", command=clearEvents, bg='White', fg='Black')
-        button_clear.pack()
-
-        space_2 = tk.Label(ws, text=" ")
-        space_2.pack()
 
         # schedule button jump to the schdule page
-        button = tk.Button(ws, text="Schedule", bg='White', fg='Black',
-                                      command=lambda:self.New_Window())
+        button = tk.Button(ws, text="Schedule", bg='White', fg='Black', font=("Helvetica", 19), height = 2, width = 10, command=lambda:self.scheduleWindow())
 
-        button.pack()
+        button.grid(row=1, column=1)
 
-        close_main = tk.Button(ws, text="Close", command=endCommand, bg='White', fg='Black')
-        close_main.pack()
+        close_main = tk.Button(ws, text="Close", command=endCommand, bg='White', fg='Black', font=("Helvetica", 19), height=2, width=10)
+        close_main.grid(row=2, column=1)
 
+        next_notice = tk.Label(ws, text="Next Event", font=("Helvetica", 24))
+        next_notice.grid(row=3, column=1)
+        
+        self.next_event = tk.Listbox(ws, height = 9, width = 38, activestyle = 'none', font=("Helvetica", 18))
+        self.next_event.grid(row=4, column=1)
+        
     def processIncoming(self, clearEvents):
         """Handle all messages currently in the queue, if any."""
         while self.queue.qsize(  ):
             try:
-                global currentlyDispensing
                 msg = self.queue.get(0)
                 if msg == 'update':
                     print("----processing----")
@@ -502,22 +622,30 @@ myFont_w = font.Font(size=16)
                     #Update database
                     updateDatabase('data.txt', self.dispenseEvents)
 
-                    # self.dispenseEvents = msg
+                    # Iterate though events
                     for item in self.dispenseEvents:
-                        listString = "Date:" + months[item.start_month-1] + " " + str(item.start_day) + ", at " + item.dispenseTime
+                        # Adjust time to AM/PM
+                        dispTime = int(item.dispenseTime.split(':')[0])
+                        if dispTime < 12 or dispTime == 24:
+                            ampm = "AM"
+                        else:
+                            ampm = "PM"
+                            dispTime = dispTime - 12
+                        if dispTime == 0:
+                            dispTime = 12
+                        dispTime = str(dispTime) + ':' + item.dispenseTime.split(':')[1] + ampm
+
+                        # Add to event board
+                        if item.google_cal:
+                            listString = "Date:" + months[item.start_month-1] + " " + str(item.start_day) + ", at " + dispTime + ";  From Google"
+                        else:
+                            listString = "Date:" + months[item.start_month-1] + " " + str(item.start_day) + ", at " + dispTime
                         self.events.insert(END,"DispTime: " + listString)
 
-                elif type(msg) is dispenseItem:
-                    if not currentlyDispensing and msg in self.dispenseEvents:
-                        currentlyDispensing = True
-
-                        # dispensing actions placeholder
-                        dispense(3/1000.0,128)
-
-                        #Remove used dispenseItem
-                        clearEvents('item', msg)
-                        self.queue.put('update')
-                        currentlyDispensing = False
+                elif msg == 'dispensing':
+                    print("dispensing")
+                elif msg == 'dispenseError':
+                    print("dispensing ERROR")
 
             except queue.Empty:
                 # just on general principles, although we don't
@@ -541,6 +669,7 @@ class ThreadedClient:
         """
         self.master = master
         global currentlyDispensing
+        GPIO.output(enable_pin,0)
 
         # Create the queue
         self.queue = queue.Queue(  )
@@ -553,6 +682,9 @@ class ThreadedClient:
             print("Error reading database!")
             self.dispenseEvents = []
         print('DB read!')
+
+        # Bracelet Thread
+
 
         # Set up the GUI part
         self.gui = GuiPart(master, self.queue, self.endApplication, self.dispenseEvents, self.clearEvents)
@@ -583,23 +715,22 @@ class ThreadedClient:
         self.running = 1
         self.dispenseThread = threading.Thread(target=self.dispenseCheckWorkerThread)
         self.calendarThread = threading.Thread(target=self.calendarWorkerThread)
+        self.braceletThread = threading.Thread(target=self.braceletWorkerThread)
         self.dispenseThread.start()
         self.calendarThread.start()
+        self.braceletThread.start()
 
         # Start the periodic call in the GUI to check if the queue contains
         # anything
         self.periodicCall(  )
 
     def clearEvents(self, modifier = 'all', removedEvent = []):
-        print(self.dispenseEvents)
-        print("------------BEFORE CLEAR COMMAND------------------")
         if modifier == 'all':
             self.dispenseEvents.clear()
         elif modifier == 'item':
             if removedEvent:
                 self.dispenseEvents.remove(removedEvent)
-        print(self.dispenseEvents)
-        print("------------AFTER CLEAR COMMAND------------------")
+        print("------------EVENTS CLEARED------------------")
         self.queue.put('update')
 
     def periodicCall(self):
@@ -620,16 +751,73 @@ class ThreadedClient:
         the time inside every dispenseItem inside DispenseEvents,
         and if it matches, we send the dispense signal into the queue.
         """
+        
+        global currentItem
+        global currentlyDispensing
+        global dispenseTimer
+        global dispensedPills
         while self.running:
             print('Checking dispense time')
-            currentTime = time.strftime("%H") + ":" + time.strftime("%M")
+            currentTime = str(int(time.strftime("%H"))) + ":" + time.strftime("%M")
             for item in self.dispenseEvents:
                 if not currentlyDispensing and int(time.strftime("%d")) >= item.start_day and int(time.strftime("%m")) >= item.start_month:
                     if currentTime == item.dispenseTime:
-                        self.queue.put(item)
+                        currentItem = item
+                        currentlyDispensing = True
+                        self.queue.put('dispensing')
                         print('Dispense command sent')
+                        break
 
-            time.sleep(5)
+            if not currentlyDispensing:
+                print('Checking dispense time')
+                time.sleep(5)
+            if currentlyDispensing:
+                if dispenseTimer == 0:
+
+                    self.clearEvents('item', currentItem)
+                    self.queue.put('update')
+                    GPIO.output(enable_pin,1)
+                    GPIO.output(buzzer_pin,1)
+                    dispense(3/1000.0,128)
+                    print('rotation')
+
+                time.sleep(0.2)
+                dispenseTimer = dispenseTimer + 1
+
+                if dispenseTimer > 20:
+                    print('checks')
+                    dispensedPills = dispensedPills + 1
+                    dispenseTimer = 0
+                    GPIO.output(buzzer_pin,0)
+                    if not GPIO.input(tripwire_input_pin):
+                        print('laser')
+                        self.queue.put('dispenseError')
+                        dispensedPills = 0
+                        dispenseTimer == 0
+                        currentlyDispensing = False
+                    else:
+                        #Remove used dispenseItem
+                        dispensedPills = 0
+                        print('success')
+                        self.queue.put('dispenseSuccess')
+                        currentlyDispensing = False
+
+                    currentlyDispensing = False
+                    GPIO.output(enable_pin,0)
+                    time.sleep(0.1)
+                     # if currentlyDispensing and chamber_led_input_pin:
+                     #     print('chamber')
+                    #     self.queue.put('dispenseError')
+                    #     dispensedPills = 0
+                    #     dispenseTimer == 0
+                    #     currentlyDispensing = False
+
+                    # else:
+                    #     #Remove used dispenseItem
+                    #     dispensedPills = 0
+                    #     self.queue.put('dispenseSuccess')
+                    #     currentlyDispensing = False
+
         print("dispenseCheck worker dying")
 
     def calendarWorkerThread(self):
@@ -648,6 +836,7 @@ class ThreadedClient:
 
             if not events:
                 print('No upcoming events found.')
+                time.sleep(3)
 
             for event in events:
                 start = event['start'].get('dateTime', event['start'].get('date'))
@@ -662,10 +851,9 @@ class ThreadedClient:
 
                         if not duplicate:
                             parts = event['start'].get('dateTime').split('T')
-                            print(parts)
                             dateParts = parts[0].split('-')
                             dispenseTimeParts = parts[1].split(':')
-                            dispenseTime = dispenseTimeParts[0] + ":" + dispenseTimeParts[1]
+                            dispenseTime = str(int(dispenseTimeParts[0])) + ":" + dispenseTimeParts[1]
 
                             newItem = dispenseItem(event['id'],int(dateParts[0]), int(dateParts[1]), int(dateParts[2]), dispenseTime, True)
                             self.dispenseEvents.append(newItem)
@@ -674,7 +862,7 @@ class ThreadedClient:
                         parts = event['start'].get('dateTime').split('T')
                         dateParts = parts[0].split('-')
                         dispenseTimeParts = parts[1].split(':')
-                        dispenseTime = dispenseTimeParts[0] + ":" + dispenseTimeParts[1]
+                        dispenseTime = str(int(dispenseTimeParts[0])) + ":" + dispenseTimeParts[1]
                         newItem = dispenseItem(event['id'],int(dateParts[0]), int(dateParts[1]), int(dateParts[2]), dispenseTime, True)
                         self.dispenseEvents.append(newItem)
                         self.queue.put('update')
@@ -687,11 +875,36 @@ class ThreadedClient:
         This worker thread handles he connection with the bracelet device,
         and sends all necessary dispensing data.
         """
-        while self.running:
-        
 
-            self.queue.put(msg)
-        print("worker dying")   
+        global currentlyDispensing
+        
+        while self.running:
+            try:
+                print("Connecting...")
+                dev = btle.Peripheral("1c:9d:c2:82:9e:1a") # board1new
+
+                print("Services...")
+                for svc in dev.services:
+                    print(str(svc))
+
+                bracelet = btle.UUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b")
+                service = dev.getServiceByUUID(bracelet)
+
+                chtruuid = btle.UUID("beb5483e-36e1-4688-b7f5-ea07361b26a8")
+                chtr = service.getCharacteristics(chtruuid)[0]
+                print(str(chtr.read()))
+                
+                while self.running:
+                    if currentlyDispensing:
+                        chtr.write(str.encode("dispensing"))
+                        time.sleep(5)
+                        chtr.write(str.encode("normal"))
+
+                # time.sleep(0.1)
+            except Exception:
+                print('Error connecting')
+
+        print("braceletworker dying")   
 
     def endApplication(self):
         print("end command sent")
@@ -701,7 +914,7 @@ class ThreadedClient:
 #     Main
 #############################################
 
-print("start")
+print("Starting Main Program")
 ws = tk.Tk()
 ws.title("Home Page")
 
@@ -716,4 +929,5 @@ client.endApplication()
 print("threads alive: " + str(client.dispenseThread.is_alive()))
 GPIO.cleanup()
 sys.exit(1)
+
 
