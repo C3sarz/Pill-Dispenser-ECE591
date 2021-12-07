@@ -54,14 +54,16 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 # GPIO Setup and pin assignments
 GPIO.setmode(GPIO.BCM)
-# GPIO.setwarnings(False)
+GPIO.setwarnings(False)
+
+# Motor pins for the RPI4
 motor_enable_pin = 18; # enable pin
 coil_A_1_pin = 4 # pink
 coil_A_2_pin = 17 # orange
 coil_B_1_pin = 23 # blue
 coil_B_2_pin = 24 # yellow
 
-# Peripheral Pins
+# Peripheral Pins for the RPI4
 buzzer_pin = 13 # PWM Channel 1 Buzzer Pin
 laser_pin = 25 # Pin to control the tripwire laser
 chamber_led_pin = 9 # Pin to control the cylinder chamber LED
